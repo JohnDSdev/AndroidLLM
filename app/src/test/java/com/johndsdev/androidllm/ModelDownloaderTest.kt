@@ -59,11 +59,13 @@ class ModelDownloaderTest {
                 ) { }
                 fail("Expected a truncated download to fail")
             } catch (expected: Exception) {
-                val text = generateSequence<Throwable?>(expected) { it.cause }
-                    .filterNotNull()
-                    .mapNotNull { it.message }
-                    .joinToString(" ")
-                    .lowercase()
+                val messages = mutableListOf<String>()
+                var current: Throwable? = expected
+                while (current != null) {
+                    current.message?.let { messages += it }
+                    current = current.cause
+                }
+                val text = messages.joinToString(" ").lowercase()
                 assertTrue(text.contains("stream") || text.contains("early") || text.contains("unexpected"))
             }
             assertFalse(modelsDir.listFiles()?.any { it.extension.equals("gguf", true) } == true)
