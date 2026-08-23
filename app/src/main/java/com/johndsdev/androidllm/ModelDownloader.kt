@@ -20,13 +20,15 @@ object ModelDownloader {
         }
 
         modelsDir.mkdirs()
-        var connection = open(directUrl)
+        var currentUrl = directUrl
+        var connection = open(currentUrl)
         var redirects = 0
         while (connection.responseCode in 300..399 && redirects < 8) {
             val location = connection.getHeaderField("Location")
                 ?: error("Redirect did not include a Location header")
+            currentUrl = URL(URL(currentUrl), location).toString()
             connection.disconnect()
-            connection = open(URL(URL(directUrl), location).toString())
+            connection = open(currentUrl)
             redirects++
         }
 
@@ -37,7 +39,7 @@ object ModelDownloader {
             error("Download failed with HTTP $code${if (message.isNullOrBlank()) "" else ": $message"}")
         }
 
-        val fileName = chooseFileName(connection, directUrl)
+        val fileName = chooseFileName(connection, currentUrl)
         require(fileName.lowercase().endsWith(".gguf")) {
             "The direct URL did not resolve to a .gguf file."
         }
@@ -67,6 +69,13 @@ object ModelDownloader {
                     onProgress(Progress(downloaded, total))
                 }
             }
+
+            val magic = ByteArray(4)
+            val magicRead = partial.inputStream().use { it.read(magic) }
+            require(magicRead == 4 && magic.contentEquals(byteArrayOf(0x47, 0x47, 0x55, 0x46))) {
+                "Downloaded file is not a valid GGUF file. Check that the URL points directly to the model file."
+            }
+
             if (!partial.renameTo(destination)) {
                 partial.copyTo(destination, overwrite = true)
                 partial.delete()
@@ -89,7 +98,7 @@ object ModelDownloader {
             setRequestProperty("User-Agent", "AndroidLLM/0.1")
         }
 
-    private fun chooseFileName(connection: HttpURLConnection, directUrl: String): String {
+    private fun chooseFileName(connection: HttpURLConnection, resolvedUrl: String): String {
         val disposition = connection.getHeaderField("Content-Disposition").orEmpty()
         val fromHeader = Regex("filename\\*?=(?:UTF-8''|\")?([^\";]+)", RegexOption.IGNORE_CASE)
             .find(disposition)
@@ -100,7 +109,7 @@ object ModelDownloader {
             ?.takeIf { it.isNotBlank() }
 
         val fromUrl = runCatching {
-            URLDecoder.decode(URI(directUrl).path.substringAfterLast('/'), StandardCharsets.UTF_8.name())
+            URLDecoder.decode(URI(resolvedUrl).path.substringAfterLast('/'), StandardCharsets.UTF_8.name())
         }.getOrNull()?.takeIf { it.isNotBlank() }
 
         return sanitize(fromHeader ?: fromUrl ?: "model.gguf")
