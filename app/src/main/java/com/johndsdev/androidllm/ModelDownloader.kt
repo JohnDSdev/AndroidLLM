@@ -90,6 +90,13 @@ object ModelDownloader {
                 throw IOException("The model download stream failed", t)
             }
 
+            val actualSize = partial.length()
+            if (total > 0L && actualSize != total) {
+                throw IOException(
+                    "The model download ended early. Expected $total bytes but received $actualSize bytes"
+                )
+            }
+
             validateGguf(partial)
 
             if (!partial.renameTo(destination)) {
@@ -148,7 +155,7 @@ object ModelDownloader {
             instanceFollowRedirects = false
             requestMethod = "GET"
             useCaches = false
-            setRequestProperty("User-Agent", "AndroidLLM/0.2")
+            setRequestProperty("User-Agent", "AndroidLLM/0.2.1")
             setRequestProperty("Accept", "application/octet-stream,*/*")
             setRequestProperty("Accept-Encoding", "identity")
         }
