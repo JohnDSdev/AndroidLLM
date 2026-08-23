@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="app_background">#0B0D10</color>
+    <color name="surface">#14181D</color>
+    <color name="surface_alt">#1B2027</color>
+    <color name="surface_elevated">#171B21</color>
+    <color name="text_primary">#F3F5F7</color>
+    <color name="text_secondary">#98A1AE</color>
+    <color name="accent">#82AFFF</color>
+    <color name="accent_on">#0B1628</color>
+    <color name="accent_soft">#1A2944</color>
+    <color name="divider">#272D35</color>
+    <color name="danger">#FF7979</color>
+    <color name="user_bubble">#315DAD</color>
+    <color name="user_text">#FFFFFF</color>
+    <color name="assistant_bubble">#171B21</color>
+    <color name="assistant_text">#F3F5F7</color>
+    <color name="chip_background">#1B2027</color>
+</resources>
