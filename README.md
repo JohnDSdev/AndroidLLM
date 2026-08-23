@@ -17,9 +17,13 @@ A basic on-device Android chat app built around the official `llama.cpp` Android
 
 ## Build
 
-The GitHub Actions workflow clones the pinned `llama.cpp` source, applies the small Android-binding patch in `scripts/prepare_llama.py`, builds an ARM64 debug APK, uploads it as an Actions artifact, and publishes it to the `dev-build` GitHub prerelease.
+The GitHub Actions workflow clones the pinned `llama.cpp` source, applies the small Android-binding patch in `scripts/prepare_llama.py`, runs the downloader regression test, builds an ARM64 APK, and uploads it as an Actions artifact. Main-branch builds are also published to the `dev-build` GitHub prerelease.
 
 For a local build, clone `llama.cpp` into `vendor/llama.cpp` at tag `b10524`, run `python3 scripts/prepare_llama.py`, install Android API 36 + NDK `29.0.13113456` + CMake `3.31.6`, then run Gradle `:app:assembleDebug` with Gradle 8.14.3.
+
+## Development signing
+
+Development APKs use the checked-in `signing/androidllm-dev.keystore` so successive CI builds have the same signature and can update each other without deleting app data. This key is intentionally public and must never be used for a Play Store or other production release.
 
 ## Notes
 

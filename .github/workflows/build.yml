@@ -48,6 +48,9 @@ jobs:
           git clone --depth 1 --branch b10524 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
           python3 scripts/prepare_llama.py
 
+      - name: Test downloader
+        run: gradle --no-daemon :app:testDebugUnitTest
+
       - name: Build debug APK
         run: gradle --no-daemon :app:assembleDebug
 
