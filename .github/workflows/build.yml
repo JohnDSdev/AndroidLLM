@@ -40,12 +40,12 @@ jobs:
       - name: Install Android toolchain
         run: |
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.13113456" "cmake;3.31.6"
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.14206865" "cmake;3.31.6"
 
-      - name: Fetch pinned llama.cpp
+      - name: Fetch released llama.cpp
         run: |
           mkdir -p vendor
-          git clone --depth 1 --branch b10524 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
+          git clone --depth 1 --branch b10516 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
           python3 scripts/prepare_llama.py
 
       - name: Test downloader
@@ -74,6 +74,6 @@ jobs:
           else
             gh release create dev-build AndroidLLM.apk \
               --title "AndroidLLM development build" \
-              --notes "Automated arm64 debug build using llama.cpp b10524." \
+              --notes "Automated arm64 debug build using released llama.cpp b10516." \
               --prerelease
           fi
