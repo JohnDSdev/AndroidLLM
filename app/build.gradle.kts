@@ -19,12 +19,23 @@ android {
         }
     }
 
+    signingConfigs {
+        create("development") {
+            storeFile = rootProject.file("signing/androidllm-dev.keystore")
+            storePassword = "androidllm-dev"
+            keyAlias = "androidllm"
+            keyPassword = "androidllm-dev"
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("development")
         }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("development")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
