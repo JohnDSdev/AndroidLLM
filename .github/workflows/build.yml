@@ -3,6 +3,8 @@ name: Build AndroidLLM
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -56,6 +58,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish development release asset
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
