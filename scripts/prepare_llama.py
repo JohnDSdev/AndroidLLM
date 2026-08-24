@@ -26,6 +26,15 @@ replace_once(
     "suspend fun loadModel(pathToModel: String)",
     "suspend fun loadModel(pathToModel: String, contextLength: Int)",
 )
+
+# Upstream already has a volatile cancellation flag in the implementation, but
+# exposes no public way to set it without unloading the model. Add a small API
+# that stops generation between tokens while keeping the loaded model/context.
+replace_once(
+    interface,
+    "fun sendUserPrompt(message: String, predictLength: Int = DEFAULT_PREDICT_LENGTH): Flow<String>",
+    "fun sendUserPrompt(message: String, predictLength: Int = DEFAULT_PREDICT_LENGTH): Flow<String>\n\n    /** Stops an in-progress response without unloading the model. */\n    fun stopGeneration()",
+)
 replace_once(
     impl,
     "private external fun prepare(): Int",
@@ -54,6 +63,49 @@ replace_once(
                     }
                 }
                 prepare(contextLength).let {""",
+)
+replace_once(
+    impl,
+    """            Log.i(TAG, "Sending user prompt...")
+            _readyForSystemPrompt = false
+            _state.value = InferenceEngine.State.ProcessingUserPrompt""",
+    """            Log.i(TAG, "Sending user prompt...")
+            _readyForSystemPrompt = false
+            _cancelGeneration = false
+            _state.value = InferenceEngine.State.ProcessingUserPrompt""",
+)
+replace_once(
+    impl,
+    """            _state.value = InferenceEngine.State.ModelReady
+        } catch (e: CancellationException) {
+            Log.i(TAG, "Assistant generation's flow collection cancelled.")
+            _state.value = InferenceEngine.State.ModelReady""",
+    """            _cancelGeneration = false
+            _state.value = InferenceEngine.State.ModelReady
+        } catch (e: CancellationException) {
+            Log.i(TAG, "Assistant generation's flow collection cancelled.")
+            _cancelGeneration = false
+            _state.value = InferenceEngine.State.ModelReady""",
+)
+replace_once(
+    impl,
+    """    }.flowOn(llamaDispatcher)
+
+    /**
+     * Benchmark the model""",
+    """    }.flowOn(llamaDispatcher)
+
+    override fun stopGeneration() {
+        if (
+            _state.value is InferenceEngine.State.Generating ||
+            _state.value is InferenceEngine.State.ProcessingUserPrompt
+        ) {
+            _cancelGeneration = true
+        }
+    }
+
+    /**
+     * Benchmark the model""",
 )
 
 # Native loader diagnostics and context size.
@@ -193,4 +245,4 @@ gradle_text = gradle_text.replace(
 )
 gradle.write_text(gradle_text)
 
-print("llama.cpp Android binding patched: static ARM64 CPU backend, context length, native diagnostics")
+print("llama.cpp Android binding patched: static ARM64 CPU backend, context length, native diagnostics, stop generation")
