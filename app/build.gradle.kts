@@ -11,8 +11,8 @@ android {
         applicationId = "com.johndsdev.androidllm"
         minSdk = 33
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.2.3"
+        versionCode = 6
+        versionName = "0.3.0"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -61,6 +61,7 @@ dependencies {
     implementation(libs.bundles.androidx)
     implementation(libs.material)
     implementation(libs.kotlinx.coroutines.android)
+    implementation("io.noties.markwon:core:4.6.2")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
