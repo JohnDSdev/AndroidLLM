@@ -11,6 +11,7 @@ data class ChatSession(
     var title: String,
     var systemPrompt: String = "You are a helpful assistant.",
     var contextLength: Int = 4096,
+    var thinkingEnabled: Boolean = true,
     var modelFile: String? = null,
     val messages: MutableList<ChatMessage> = mutableListOf(),
 )
