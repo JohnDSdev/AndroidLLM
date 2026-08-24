@@ -30,20 +30,35 @@ main.write_text(main_text)
 # v0.3.0 enabled the Jinja thinking path for every message role. Qwen3.5's
 # template deliberately raises when there is no user query, which is exactly the
 # state while AndroidLLM is formatting the initial system prompt during model
-# loading. Keep the original/legacy formatting for system + assistant turns and
-# use the Jinja enable_thinking path only when formatting an actual user turn.
+# loading. Only use Jinja for a real user turn. Also catch template exceptions and
+# fall back to the original legacy formatter so an unusual/broken GGUF template
+# can disable the thinking toggle for that turn instead of terminating the app.
 cpp_text = cpp.read_text()
-old_jinja = "    const bool use_jinja = common_chat_templates_support_enable_thinking(g_chat_templates.get());"
-new_jinja = "    const bool use_jinja = role == ROLE_USER && common_chat_templates_support_enable_thinking(g_chat_templates.get());"
-if old_jinja not in cpp_text:
-    raise SystemExit("v0.3 Jinja selection line not found in generated ai_chat.cpp")
-cpp_text = cpp_text.replace(old_jinja, new_jinja, 1)
+old_block = '''    const bool use_jinja = common_chat_templates_support_enable_thinking(g_chat_templates.get());
+    auto formatted = common_chat_format_single(
+            g_chat_templates.get(), chat_msgs, new_msg, role == ROLE_USER, use_jinja, enable_thinking);'''
+new_block = '''    std::string formatted;
+    try {
+        const bool use_jinja = role == ROLE_USER && common_chat_templates_support_enable_thinking(g_chat_templates.get());
+        formatted = common_chat_format_single(
+                g_chat_templates.get(), chat_msgs, new_msg, role == ROLE_USER, use_jinja, enable_thinking);
+    } catch (const std::exception &e) {
+        LOGw("Thinking-aware chat template failed (%s); falling back to legacy formatting", e.what());
+        formatted = common_chat_format_single(
+                g_chat_templates.get(), chat_msgs, new_msg, role == ROLE_USER, /* use_jinja */ false, true);
+    }'''
+if old_block not in cpp_text:
+    raise SystemExit("v0.3 thinking-format block not found in generated ai_chat.cpp")
+cpp_text = cpp_text.replace(old_block, new_block, 1)
 cpp.write_text(cpp_text)
 
 # Build-time regression guards. These intentionally fail CI if a future patch
 # silently restores either crash path.
-assert "MaterialSwitch(this)" not in main.read_text()
-assert "SwitchCompat(this)" in main.read_text()
-assert new_jinja in cpp.read_text()
+generated_main = main.read_text()
+generated_cpp = cpp.read_text()
+assert "MaterialSwitch(this)" not in generated_main
+assert "SwitchCompat(this)" in generated_main
+assert "role == ROLE_USER && common_chat_templates_support_enable_thinking" in generated_cpp
+assert "falling back to legacy formatting" in generated_cpp
 
-print("v0.3 runtime regressions patched: safe settings switch + user-only thinking Jinja")
+print("v0.3 runtime regressions patched: safe settings switch + guarded user-only thinking Jinja")
