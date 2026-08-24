@@ -9,6 +9,8 @@ if not llama.exists():
 interface = llama / "examples/llama.android/lib/src/main/java/com/arm/aichat/InferenceEngine.kt"
 impl = llama / "examples/llama.android/lib/src/main/java/com/arm/aichat/internal/InferenceEngineImpl.kt"
 cpp = llama / "examples/llama.android/lib/src/main/cpp/ai_chat.cpp"
+chat_h = llama / "common/chat.h"
+chat_cpp = llama / "common/chat.cpp"
 cmake = llama / "examples/llama.android/lib/src/main/cpp/CMakeLists.txt"
 gradle = llama / "examples/llama.android/lib/build.gradle.kts"
 
@@ -27,18 +29,23 @@ replace_once(
     "suspend fun loadModel(pathToModel: String, contextLength: Int)",
 )
 
-# Upstream already has a volatile cancellation flag in the implementation, but
-# exposes no public way to set it without unloading the model. Add a small API
-# that stops generation between tokens while keeping the loaded model/context.
+# Public stop control plus a per-request thinking flag. The latter is passed into
+# llama.cpp's Jinja chat-template machinery, so models whose templates support
+# `enable_thinking` (Qwen3/Qwen3.5 and others) can actually switch modes.
 replace_once(
     interface,
     "fun sendUserPrompt(message: String, predictLength: Int = DEFAULT_PREDICT_LENGTH): Flow<String>",
-    "fun sendUserPrompt(message: String, predictLength: Int = DEFAULT_PREDICT_LENGTH): Flow<String>\n\n    /** Stops an in-progress response without unloading the model. */\n    fun stopGeneration()",
+    "fun sendUserPrompt(message: String, predictLength: Int = DEFAULT_PREDICT_LENGTH, enableThinking: Boolean = true): Flow<String>\n\n    /** Stops an in-progress response without unloading the model. */\n    fun stopGeneration()",
 )
 replace_once(
     impl,
     "private external fun prepare(): Int",
     "private external fun prepare(contextLength: Int): Int\n\n    @FastNative\n    private external fun lastNativeError(): String",
+)
+replace_once(
+    impl,
+    "private external fun processUserPrompt(userPrompt: String, predictLength: Int): Int",
+    "private external fun processUserPrompt(userPrompt: String, predictLength: Int, enableThinking: Boolean): Int\n\n    @FastNative\n    private external fun finishStoppedGeneration()",
 )
 replace_once(
     impl,
@@ -66,6 +73,18 @@ replace_once(
 )
 replace_once(
     impl,
+    """    override fun sendUserPrompt(
+        message: String,
+        predictLength: Int,
+    ): Flow<String> = flow {""",
+    """    override fun sendUserPrompt(
+        message: String,
+        predictLength: Int,
+        enableThinking: Boolean,
+    ): Flow<String> = flow {""",
+)
+replace_once(
+    impl,
     """            Log.i(TAG, "Sending user prompt...")
             _readyForSystemPrompt = false
             _state.value = InferenceEngine.State.ProcessingUserPrompt""",
@@ -76,13 +95,32 @@ replace_once(
 )
 replace_once(
     impl,
-    """            _state.value = InferenceEngine.State.ModelReady
-        } catch (e: CancellationException) {
+    "processUserPrompt(message, predictLength).let { result ->",
+    "processUserPrompt(message, predictLength, enableThinking).let { result ->",
+)
+replace_once(
+    impl,
+    """            if (_cancelGeneration) {
+                Log.i(TAG, "Assistant generation aborted per requested.")
+            } else {
+                Log.i(TAG, "Assistant generation complete. Awaiting user prompt...")
+            }
+            _state.value = InferenceEngine.State.ModelReady""",
+    """            if (_cancelGeneration) {
+                Log.i(TAG, "Assistant generation aborted per requested.")
+                finishStoppedGeneration()
+            } else {
+                Log.i(TAG, "Assistant generation complete. Awaiting user prompt...")
+            }
+            _cancelGeneration = false
+            _state.value = InferenceEngine.State.ModelReady""",
+)
+replace_once(
+    impl,
+    """        } catch (e: CancellationException) {
             Log.i(TAG, "Assistant generation's flow collection cancelled.")
             _state.value = InferenceEngine.State.ModelReady""",
-    """            _cancelGeneration = false
-            _state.value = InferenceEngine.State.ModelReady
-        } catch (e: CancellationException) {
+    """        } catch (e: CancellationException) {
             Log.i(TAG, "Assistant generation's flow collection cancelled.")
             _cancelGeneration = false
             _state.value = InferenceEngine.State.ModelReady""",
@@ -108,7 +146,31 @@ replace_once(
      * Benchmark the model""",
 )
 
-# Native loader diagnostics and context size.
+# Teach common_chat_format_single to forward enable_thinking to Jinja templates.
+replace_once(
+    chat_h,
+    """                                      bool                                 add_ass,
+                                      bool                                 use_jinja);""",
+    """                                      bool                                 add_ass,
+                                      bool                                 use_jinja,
+                                      bool                                 enable_thinking = true);""",
+)
+replace_once(
+    chat_cpp,
+    """                                      bool                                 add_ass,
+                                      bool                                 use_jinja) {
+    common_chat_templates_inputs inputs;
+    inputs.use_jinja = use_jinja;""",
+    """                                      bool                                 add_ass,
+                                      bool                                 use_jinja,
+                                      bool                                 enable_thinking) {
+    common_chat_templates_inputs inputs;
+    inputs.use_jinja = use_jinja;
+    inputs.enable_thinking = enable_thinking;""",
+)
+
+# Native loader diagnostics, context size, thinking-aware formatting, and clean
+# finalization of partial assistant text after the user hits Stop.
 cpp_text = cpp.read_text()
 marker = "static common_sampler                   * g_sampler;"
 if marker not in cpp_text:
@@ -135,10 +197,6 @@ cpp_text = cpp_text.replace(
     1,
 )
 
-# The upstream Android example expects separately packaged dynamic CPU backend
-# .so files and scans nativeLibraryDir for them. AndroidLLM only packaged ai-chat,
-# which left the registry empty on-device. Build one CPU backend into the native
-# dependency graph instead and do not depend on runtime dlopen discovery.
 old_backend_init = '''    // Loading all CPU backend variants
     const auto *path_to_backend = env->GetStringUTFChars(nativeLibDir, 0);
     LOGi("Loading backends from %s", path_to_backend);
@@ -212,11 +270,58 @@ if old_prepare not in cpp_text:
     raise SystemExit("Could not locate native prepare() implementation")
 cpp_text = cpp_text.replace(old_prepare, new_prepare, 1)
 cpp_text = cpp_text.replace("DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM", "g_context_size - OVERFLOW_HEADROOM")
+
+old_chat_format = '''    auto formatted = common_chat_format_single(
+            g_chat_templates.get(), chat_msgs, new_msg, role == ROLE_USER, /* use_jinja */ false);'''
+new_chat_format = '''    const bool use_jinja = common_chat_templates_support_enable_thinking(g_chat_templates.get());
+    auto formatted = common_chat_format_single(
+            g_chat_templates.get(), chat_msgs, new_msg, role == ROLE_USER, use_jinja, enable_thinking);'''
+if old_chat_format not in cpp_text:
+    raise SystemExit("Could not locate Android single-message chat formatting")
+cpp_text = cpp_text.replace(
+    "static std::string chat_add_and_format(const std::string &role, const std::string &content) {",
+    "static std::string chat_add_and_format(const std::string &role, const std::string &content, const bool enable_thinking = true) {",
+    1,
+)
+cpp_text = cpp_text.replace(old_chat_format, new_chat_format, 1)
+
+old_user_sig = '''        jobject /*unused*/,
+        jstring juser_prompt,
+        jint n_predict
+) {'''
+new_user_sig = '''        jobject /*unused*/,
+        jstring juser_prompt,
+        jint n_predict,
+        jboolean jenable_thinking
+) {'''
+if old_user_sig not in cpp_text:
+    raise SystemExit("Could not locate native processUserPrompt signature")
+cpp_text = cpp_text.replace(old_user_sig, new_user_sig, 1)
+cpp_text = cpp_text.replace(
+    "formatted_user_prompt = chat_add_and_format(ROLE_USER, user_prompt);",
+    "formatted_user_prompt = chat_add_and_format(ROLE_USER, user_prompt, jenable_thinking == JNI_TRUE);",
+    1,
+)
+
+finish_stopped_jni = '''
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_arm_aichat_internal_InferenceEngineImpl_finishStoppedGeneration(JNIEnv * /*env*/, jobject /*unused*/) {
+    if (!assistant_ss.str().empty()) {
+        chat_add_and_format(ROLE_ASSISTANT, assistant_ss.str());
+    }
+}
+
+'''
+gen_marker = "extern \"C\"\nJNIEXPORT jstring JNICALL\nJava_com_arm_aichat_internal_InferenceEngineImpl_generateNextToken"
+if gen_marker not in cpp_text:
+    raise SystemExit("Could not locate generateNextToken JNI")
+cpp_text = cpp_text.replace(gen_marker, finish_stopped_jni + gen_marker, 1)
 cpp.write_text(cpp_text)
 
 # Match the released Android toolchain, but use a monolithic CPU build instead of
 # runtime-loaded backend modules. armv8.2 + dotprod + fp16 is supported by the
-# Snapdragon 8 Gen 2 and avoids compiling only the slowest ARM64 baseline path.
+# target ARM64 devices and is substantially better than baseline-only ARMv8.
 cmake_text = cmake.read_text()
 cmake_text = cmake_text.replace("set(GGML_CPU_KLEIDIAI ON)", "set(GGML_CPU_KLEIDIAI OFF)")
 cmake_text = cmake_text.replace("set(GGML_OPENMP ON)", "set(GGML_OPENMP OFF)")
@@ -245,4 +350,4 @@ gradle_text = gradle_text.replace(
 )
 gradle.write_text(gradle_text)
 
-print("llama.cpp Android binding patched: static ARM64 CPU backend, context length, native diagnostics, stop generation")
+print("llama.cpp Android binding patched: static CPU backend, context, diagnostics, stop, thinking toggle")
