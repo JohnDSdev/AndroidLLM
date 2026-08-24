@@ -82,6 +82,35 @@ cpp_text = cpp_text.replace(
     "llama_log_set(aichat_capture_log_callback, nullptr);",
     1,
 )
+
+# The upstream Android example expects separately packaged dynamic CPU backend
+# .so files and scans nativeLibraryDir for them. AndroidLLM only packaged ai-chat,
+# which left the registry empty on-device. Build one CPU backend into the native
+# dependency graph instead and do not depend on runtime dlopen discovery.
+old_backend_init = '''    // Loading all CPU backend variants
+    const auto *path_to_backend = env->GetStringUTFChars(nativeLibDir, 0);
+    LOGi("Loading backends from %s", path_to_backend);
+    ggml_backend_load_all_from_path(path_to_backend);
+    env->ReleaseStringUTFChars(nativeLibDir, path_to_backend);
+
+    // Initialize backends
+    llama_backend_init();
+    LOGi("Backend initiated; Log handler set.");'''
+new_backend_init = '''    (void) env;
+    (void) nativeLibDir;
+
+    // The CPU backend is linked into the app, so registry construction is enough.
+    llama_backend_init();
+    const size_t backend_count = ggml_backend_reg_count();
+    LOGi("Backend initiated; %zu backend(s) registered.", backend_count);
+    for (size_t i = 0; i < backend_count; ++i) {
+        auto *reg = ggml_backend_reg_get(i);
+        LOGi("Registered backend: %s", ggml_backend_reg_name(reg));
+    }'''
+if old_backend_init not in cpp_text:
+    raise SystemExit("Could not locate dynamic Android backend initialization block")
+cpp_text = cpp_text.replace(old_backend_init, new_backend_init, 1)
+
 load_marker = '''Java_com_arm_aichat_internal_InferenceEngineImpl_load(JNIEnv *env, jobject, jstring jmodel_path) {
     llama_model_params model_params = llama_model_default_params();'''
 if load_marker not in cpp_text:
@@ -89,7 +118,11 @@ if load_marker not in cpp_text:
 cpp_text = cpp_text.replace(
     load_marker,
     load_marker + '''
-    g_last_native_error.clear();''',
+    g_last_native_error.clear();
+    if (ggml_backend_reg_count() == 0) {
+        g_last_native_error = "AndroidLLM started without a registered llama.cpp backend";
+        return 2;
+    }''',
     1,
 )
 old_load_failure = '''    if (!model) {
@@ -129,14 +162,14 @@ cpp_text = cpp_text.replace(old_prepare, new_prepare, 1)
 cpp_text = cpp_text.replace("DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM", "g_context_size - OVERFLOW_HEADROOM")
 cpp.write_text(cpp_text)
 
-# Match the released Android llama.cpp build more closely. In particular, the
-# release build disables OpenMP and does not enable KleidiAI explicitly.
+# Match the released Android toolchain, but use a monolithic CPU build instead of
+# runtime-loaded backend modules. armv8.2 + dotprod + fp16 is supported by the
+# Snapdragon 8 Gen 2 and avoids compiling only the slowest ARM64 baseline path.
 cmake_text = cmake.read_text()
 cmake_text = cmake_text.replace("set(GGML_CPU_KLEIDIAI ON)", "set(GGML_CPU_KLEIDIAI OFF)")
 cmake_text = cmake_text.replace("set(GGML_OPENMP ON)", "set(GGML_OPENMP OFF)")
 cmake.write_text(cmake_text)
 
-# ARM64 only, and use the NDK revision used by the b10516 Android release build.
 gradle_text = gradle.read_text()
 gradle_text = gradle_text.replace(
     'abiFilters += listOf("arm64-v8a", "x86_64")',
@@ -146,6 +179,18 @@ gradle_text = gradle_text.replace(
     'ndkVersion = "29.0.13113456"',
     'ndkVersion = "29.0.14206865"',
 )
+gradle_text = gradle_text.replace(
+    'arguments += "-DBUILD_SHARED_LIBS=ON"',
+    'arguments += "-DBUILD_SHARED_LIBS=OFF"',
+)
+gradle_text = gradle_text.replace(
+    'arguments += "-DGGML_BACKEND_DL=ON"',
+    'arguments += "-DGGML_BACKEND_DL=OFF"',
+)
+gradle_text = gradle_text.replace(
+    'arguments += "-DGGML_CPU_ALL_VARIANTS=ON"',
+    'arguments += "-DGGML_CPU_ALL_VARIANTS=OFF"\n                arguments += "-DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16"',
+)
 gradle.write_text(gradle_text)
 
-print("llama.cpp Android binding patched: context length, native diagnostics, release-aligned ARM64 CPU build")
+print("llama.cpp Android binding patched: static ARM64 CPU backend, context length, native diagnostics")
