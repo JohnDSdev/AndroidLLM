@@ -71,6 +71,7 @@ class AppStore(private val context: Context) {
             obj.put("title", chat.title)
             obj.put("systemPrompt", chat.systemPrompt)
             obj.put("contextLength", chat.contextLength)
+            obj.put("thinkingEnabled", chat.thinkingEnabled)
             obj.put("modelFile", chat.modelFile ?: JSONObject.NULL)
             val messageArray = JSONArray()
             chat.messages.forEach { message ->
@@ -122,6 +123,7 @@ class AppStore(private val context: Context) {
                     title = obj.optString("title", "New chat"),
                     systemPrompt = obj.optString("systemPrompt", "You are a helpful assistant."),
                     contextLength = obj.optInt("contextLength", 4096).coerceAtLeast(512),
+                    thinkingEnabled = obj.optBoolean("thinkingEnabled", true),
                     modelFile = if (obj.isNull("modelFile")) null else obj.optString("modelFile").takeIf { it.isNotBlank() },
                     messages = messages,
                 )
