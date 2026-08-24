@@ -4,6 +4,7 @@ local.properties
 build/
 **/build/
 vendor/
+app/src/main/jniLibs/
 *.iml
 *.apk
 *.aab

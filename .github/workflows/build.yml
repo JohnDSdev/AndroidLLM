@@ -49,6 +49,13 @@ jobs:
           python3 scripts/prepare_llama.py
           python3 scripts/prepare_app.py
           python3 scripts/fix_v030_regressions.py
+          python3 scripts/performance_patch.py
+
+      - name: Build CPU backend
+        run: gradle --no-daemon :llamaLib:externalNativeBuildDebug
+
+      - name: Stage CPU backend
+        run: python3 scripts/stage_cpu_backends.py
 
       - name: Test downloader
         run: gradle --no-daemon :app:testDebugUnitTest
@@ -58,6 +65,18 @@ jobs:
 
       - name: Stage APK
         run: cp app/build/outputs/apk/debug/app-debug.apk AndroidLLM.apk
+
+      - name: Verify packaged CPU backend
+        run: |
+          unzip -l AndroidLLM.apk | tee apk-contents.txt
+          grep -q 'lib/arm64-v8a/libggml-cpu.so' apk-contents.txt
+          grep -q 'lib/arm64-v8a/libai-chat.so' apk-contents.txt
+          grep -q 'lib/arm64-v8a/libggml.so' apk-contents.txt
+          grep -q 'lib/arm64-v8a/libggml-base.so' apk-contents.txt
+          if grep -q 'libggml-cpu-android_' apk-contents.txt; then
+            echo "Unexpected CPU_ALL_VARIANTS backend found; build no longer matches Termux"
+            exit 1
+          fi
 
       - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
@@ -76,6 +95,6 @@ jobs:
           else
             gh release create dev-build AndroidLLM.apk \
               --title "AndroidLLM development build" \
-              --notes "Automated arm64 debug build using released llama.cpp b10516." \
+              --notes "Automated arm64 build using llama.cpp b10516 with a Termux-matched dynamically loaded CPU backend." \
               --prerelease
           fi
