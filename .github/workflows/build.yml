@@ -48,6 +48,7 @@ jobs:
           git clone --depth 1 --branch b10516 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
           python3 scripts/prepare_llama.py
           python3 scripts/prepare_app.py
+          python3 scripts/fix_v030_regressions.py
 
       - name: Test downloader
         run: gradle --no-daemon :app:testDebugUnitTest
