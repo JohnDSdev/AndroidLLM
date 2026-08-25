@@ -42,6 +42,11 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.14206865" "cmake;3.31.6"
 
+      - name: Install Vulkan shader toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y glslc libvulkan-dev spirv-headers
+
       - name: Fetch released llama.cpp
         run: |
           mkdir -p vendor
@@ -52,16 +57,24 @@ jobs:
           python3 scripts/chatgpt_ui_patch.py
           python3 scripts/performance_patch.py
           python3 scripts/runtime_perf_patch.py
+          python3 scripts/controls_gpu_patch.py
 
       - name: Verify generated inference hot path
         run: |
           grep -q 'GGML_CPU_ARM_ARCH=armv8.6-a+dotprod+fp16+i8mm' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
+          grep -q 'GGML_VULKAN=ON' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
           grep -q 'set(GGML_CPU_KLEIDIAI ON)' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
+          grep -q 'cpu_params.n_gpu_layers = 0' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
+          grep -q 'pp_params.n_gpu_layers = -1' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
+          grep -q 'cpu_tail' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           grep -q 'stop_generation_position = g_context_size - OVERFLOW_HEADROOM' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           grep -q 'configured context window exhausted' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           ! grep -q 'Context full! Shifting' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           ! grep -q 'LOGv("id: %d' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           grep -q 'streamingTextView?.append(chunk)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'Experimental GPU prompt processing' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'Generation threads' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          ! grep -q 'MaterialAlertDialogBuilder' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
 
       - name: Test downloader
         run: gradle --no-daemon :app:testDebugUnitTest
@@ -72,12 +85,13 @@ jobs:
       - name: Stage APK
         run: cp app/build/outputs/apk/debug/app-debug.apk AndroidLLM.apk
 
-      - name: Verify static CPU backend
+      - name: Verify static backends
         run: |
           unzip -l AndroidLLM.apk | tee apk-contents.txt
           grep -q 'lib/arm64-v8a/libai-chat.so' apk-contents.txt
 
-          # CPU code stays inside libai-chat.so. No Android runtime plugin loader.
+          # CPU and Vulkan are compiled into the main native library. No runtime
+          # backend plugin/dlopen path is allowed back into the app.
           if grep -q 'lib/arm64-v8a/libggml-cpu.so' apk-contents.txt; then
             echo "Unexpected dynamic libggml-cpu.so plugin found"
             exit 1
@@ -93,6 +107,7 @@ jobs:
           test "$size" -gt 50000000
           strings /tmp/libai-chat.so | grep -q 'AndroidLLM started without a registered llama.cpp backend'
           strings /tmp/libai-chat.so | grep -q 'configured context window exhausted'
+          strings /tmp/libai-chat.so | grep -q 'Experimental Vulkan prompt-processing model loaded'
 
       - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
@@ -111,6 +126,6 @@ jobs:
           else
             gh release create dev-build AndroidLLM.apk \
               --title "AndroidLLM development build" \
-              --notes "Automated arm64 build using llama.cpp b10516 with a statically linked armv8.6 dotprod/fp16/i8mm CPU backend, KleidiAI, and low-overhead streaming." \
+              --notes "AndroidLLM 0.7.0: custom in-app settings sheets, runtime/sampling sliders, static optimized CPU generation, and experimental Vulkan prompt-processing-only acceleration." \
               --prerelease
           fi
