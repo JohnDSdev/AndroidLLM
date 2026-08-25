@@ -10,16 +10,22 @@ for path in (cpp, vulkan_cmake):
     if not path.exists():
         raise SystemExit(f"missing generated llama.cpp file: {path}")
 
-# Android CMake runs in cross-compilation mode and normally searches only the
-# target sysroot. SPIRV-Headers is a host-side shader-build dependency, so allow
-# this one package lookup to escape the Android root and find Ubuntu's installed
-# CMake package config.
+# b10516 asks CMake to import the host SPIRV-Headers package even though this
+# Vulkan build never consumes the imported target: shaders are compiled by
+# glslc and the host vulkan-shaders-gen executable does not include SPIR-V
+# headers. During an Android cross-build, Ubuntu's package exports /usr/include,
+# which CMake rejects as a non-target include directory. Remove the unused
+# package import rather than leaking host include paths into an Android target.
 cmake_text = vulkan_cmake.read_text()
 old_find = "find_package(SPIRV-Headers CONFIG REQUIRED)"
-new_find = "find_package(SPIRV-Headers CONFIG REQUIRED NO_CMAKE_FIND_ROOT_PATH)"
 if old_find not in cmake_text:
     raise SystemExit("SPIRV-Headers find_package line not found")
-vulkan_cmake.write_text(cmake_text.replace(old_find, new_find, 1))
+cmake_text = cmake_text.replace(
+    old_find,
+    "# AndroidLLM: unused SPIRV-Headers host package import removed for Android cross-build",
+    1,
+)
+vulkan_cmake.write_text(cmake_text)
 
 cpp_text = cpp.read_text()
 
@@ -123,6 +129,7 @@ final_cpp = cpp.read_text()
 final_cmake = vulkan_cmake.read_text()
 assert "cpu_state_before_gpu" in final_cpp
 assert "restore_sequence_state(g_context, cpu_state_before_gpu)" in final_cpp
-assert "NO_CMAKE_FIND_ROOT_PATH" in final_cmake
+assert "find_package(SPIRV-Headers" not in final_cmake
+assert "unused SPIRV-Headers host package import removed" in final_cmake
 
-print("GPU PP reliability patch applied: host SPIR-V discovery + transactional CPU KV fallback")
+print("GPU PP reliability patch applied: Android-safe Vulkan configure + transactional CPU KV fallback")
