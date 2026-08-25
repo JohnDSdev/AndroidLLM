@@ -46,6 +46,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y glslc libvulkan-dev spirv-headers
+          dpkg -L spirv-headers | grep -E 'SPIRV-Headers(Config|Targets).*cmake' || true
 
       - name: Fetch released llama.cpp
         run: |
@@ -58,6 +59,7 @@ jobs:
           python3 scripts/performance_patch.py
           python3 scripts/runtime_perf_patch.py
           python3 scripts/controls_gpu_patch.py
+          python3 scripts/gpu_pp_reliability_patch.py
 
       - name: Verify generated inference hot path
         run: |
@@ -67,6 +69,9 @@ jobs:
           grep -q 'cpu_params.n_gpu_layers = 0' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           grep -q 'pp_params.n_gpu_layers = -1' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           grep -q 'cpu_tail' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
+          grep -q 'cpu_state_before_gpu' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
+          grep -q 'restore_sequence_state(g_context, cpu_state_before_gpu)' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
+          grep -q 'NO_CMAKE_FIND_ROOT_PATH' vendor/llama.cpp/ggml/src/ggml-vulkan/CMakeLists.txt
           grep -q 'stop_generation_position = g_context_size - OVERFLOW_HEADROOM' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           grep -q 'configured context window exhausted' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           ! grep -q 'Context full! Shifting' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
