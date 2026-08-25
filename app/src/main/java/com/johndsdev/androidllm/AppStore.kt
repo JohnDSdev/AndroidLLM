@@ -62,7 +62,7 @@ class AppStore(private val context: Context) {
     @Synchronized
     fun save() {
         val root = JSONObject()
-        root.put("formatVersion", 1)
+        root.put("formatVersion", 2)
         root.put("currentChatId", currentChatId)
         val chatArray = JSONArray()
         chats.forEach { chat ->
@@ -72,6 +72,14 @@ class AppStore(private val context: Context) {
             obj.put("systemPrompt", chat.systemPrompt)
             obj.put("contextLength", chat.contextLength)
             obj.put("thinkingEnabled", chat.thinkingEnabled)
+            obj.put("generationThreads", chat.generationThreads)
+            obj.put("promptThreads", chat.promptThreads)
+            obj.put("batchSize", chat.batchSize)
+            obj.put("temperature", chat.temperature.toDouble())
+            obj.put("topK", chat.topK)
+            obj.put("topP", chat.topP.toDouble())
+            obj.put("minP", chat.minP.toDouble())
+            obj.put("gpuPromptProcessing", chat.gpuPromptProcessing)
             obj.put("modelFile", chat.modelFile ?: JSONObject.NULL)
             val messageArray = JSONArray()
             chat.messages.forEach { message ->
@@ -122,8 +130,16 @@ class AppStore(private val context: Context) {
                     id = obj.optString("id").ifBlank { UUID.randomUUID().toString() },
                     title = obj.optString("title", "New chat"),
                     systemPrompt = obj.optString("systemPrompt", "You are a helpful assistant."),
-                    contextLength = obj.optInt("contextLength", 4096).coerceAtLeast(512),
+                    contextLength = obj.optInt("contextLength", 4096).coerceIn(512, 131072),
                     thinkingEnabled = obj.optBoolean("thinkingEnabled", true),
+                    generationThreads = obj.optInt("generationThreads", 4).coerceIn(1, 32),
+                    promptThreads = obj.optInt("promptThreads", 6).coerceIn(1, 32),
+                    batchSize = obj.optInt("batchSize", 512).coerceIn(32, 2048),
+                    temperature = obj.optDouble("temperature", 0.8).toFloat().coerceIn(0f, 2f),
+                    topK = obj.optInt("topK", 40).coerceIn(0, 200),
+                    topP = obj.optDouble("topP", 0.95).toFloat().coerceIn(0f, 1f),
+                    minP = obj.optDouble("minP", 0.05).toFloat().coerceIn(0f, 1f),
+                    gpuPromptProcessing = obj.optBoolean("gpuPromptProcessing", false),
                     modelFile = if (obj.isNull("modelFile")) null else obj.optString("modelFile").takeIf { it.isNotBlank() },
                     messages = messages,
                 )
