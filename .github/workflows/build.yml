@@ -85,7 +85,36 @@ jobs:
         run: gradle --no-daemon :app:testDebugUnitTest
 
       - name: Build debug APK
-        run: gradle --no-daemon :app:assembleDebug
+        id: build_apk
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon :app:assembleDebug 2>&1 | tee build-apk.log
+
+      - name: Summarize failed APK build
+        if: steps.build_apk.outcome == 'failure'
+        shell: bash
+        run: |
+          {
+            echo '=== compiler/linker/configuration errors ==='
+            grep -n -E '(^|[[:space:]])(error:|fatal error:|FAILED:|CMake Error|ninja: error|ld: error|undefined reference|Execution failed for task|What went wrong|BUILD FAILED)' build-apk.log | tail -n 250 || true
+            echo
+            echo '=== final 350 lines ==='
+            tail -n 350 build-apk.log
+          } > build-apk-summary.txt
+
+      - name: Upload failed-build diagnostics
+        if: steps.build_apk.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidLLM-build-diagnostics
+          path: build-apk-summary.txt
+          if-no-files-found: error
+
+      - name: Fail after diagnostics
+        if: steps.build_apk.outcome == 'failure'
+        run: exit 1
 
       - name: Stage APK
         run: cp app/build/outputs/apk/debug/app-debug.apk AndroidLLM.apk
