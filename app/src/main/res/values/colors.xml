@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="app_background">#F6F7F9</color>
-    <color name="surface">#FFFFFF</color>
-    <color name="surface_alt">#EEF1F5</color>
+    <color name="app_background">#FFFFFF</color>
+    <color name="surface">#F4F4F4</color>
+    <color name="surface_alt">#F7F7F8</color>
     <color name="surface_elevated">#FFFFFF</color>
-    <color name="text_primary">#171A1F</color>
-    <color name="text_secondary">#6B7280</color>
-    <color name="accent">#2563EB</color>
+    <color name="text_primary">#202123</color>
+    <color name="text_secondary">#6E6E80</color>
+    <color name="accent">#111111</color>
     <color name="accent_on">#FFFFFF</color>
-    <color name="accent_soft">#DBEAFE</color>
-    <color name="divider">#E2E6EB</color>
-    <color name="danger">#C93C3C</color>
-    <color name="user_bubble">#2563EB</color>
-    <color name="user_text">#FFFFFF</color>
+    <color name="accent_soft">#EFEFEF</color>
+    <color name="divider">#E5E5E5</color>
+    <color name="danger">#C23B3B</color>
+    <color name="user_bubble">#F4F4F4</color>
+    <color name="user_text">#202123</color>
     <color name="assistant_bubble">#FFFFFF</color>
-    <color name="assistant_text">#171A1F</color>
-    <color name="chip_background">#EEF1F5</color>
+    <color name="assistant_text">#202123</color>
+    <color name="chip_background">#F4F4F4</color>
 </resources>
