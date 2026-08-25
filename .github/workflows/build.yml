@@ -49,6 +49,7 @@ jobs:
           python3 scripts/prepare_llama.py
           python3 scripts/prepare_app.py
           python3 scripts/fix_v030_regressions.py
+          python3 scripts/chatgpt_ui_patch.py
           python3 scripts/performance_patch.py
 
       - name: Build CPU backend
@@ -78,6 +79,10 @@ jobs:
             exit 1
           fi
 
+          unzip -p AndroidLLM.apk lib/arm64-v8a/libai-chat.so > /tmp/libai-chat.so
+          strings /tmp/libai-chat.so | grep -q 'libggml-cpu.so'
+          strings /tmp/libai-chat.so | grep -q 'Loading CPU backend explicitly'
+
       - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
         with:
@@ -95,6 +100,6 @@ jobs:
           else
             gh release create dev-build AndroidLLM.apk \
               --title "AndroidLLM development build" \
-              --notes "Automated arm64 build using llama.cpp b10516 with a Termux-matched dynamically loaded CPU backend." \
+              --notes "Automated arm64 build using llama.cpp b10516, exact-path CPU backend registration, and the redesigned chat UI." \
               --prerelease
           fi
