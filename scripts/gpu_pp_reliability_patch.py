@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import shutil
 
 root = Path(__file__).resolve().parents[1]
 llama = root / "vendor" / "llama.cpp"
@@ -9,6 +10,20 @@ vulkan_cmake = llama / "ggml/src/ggml-vulkan/CMakeLists.txt"
 for path in (cpp, vulkan_cmake):
     if not path.exists():
         raise SystemExit(f"missing generated llama.cpp file: {path}")
+
+# b10516's Vulkan backend uses the C++ Vulkan-Hpp wrapper. Android's NDK target
+# sysroot contains the C Vulkan headers/library but does not ship vulkan.hpp.
+# CI's libvulkan-dev package does contain the portable Khronos headers; copy only
+# that header directory into the generated llama.cpp tree instead of adding the
+# host /usr/include directory to an Android target.
+host_vulkan_headers = Path("/usr/include/vulkan")
+if not (host_vulkan_headers / "vulkan.hpp").exists():
+    raise SystemExit("host Vulkan-Hpp headers missing; install libvulkan-dev first")
+android_vulkan_headers = llama / "ggml/src/ggml-vulkan/android-vulkan-headers/vulkan"
+if android_vulkan_headers.parent.exists():
+    shutil.rmtree(android_vulkan_headers.parent)
+android_vulkan_headers.parent.mkdir(parents=True, exist_ok=True)
+shutil.copytree(host_vulkan_headers, android_vulkan_headers)
 
 # b10516 asks CMake to import the host SPIRV-Headers package even though this
 # Vulkan build never consumes the imported target: shaders are compiled by
@@ -25,6 +40,18 @@ cmake_text = cmake_text.replace(
     "# AndroidLLM: unused SPIRV-Headers host package import removed for Android cross-build",
     1,
 )
+
+# Vulkan::Vulkan resolves the Android loader from the NDK, but its include path
+# only supplies the NDK C headers. Give ggml-vulkan the isolated Vulkan-Hpp copy
+# above so <vulkan/vulkan.hpp> resolves without importing arbitrary host headers.
+old_include = "target_include_directories(ggml-vulkan PRIVATE ${CMAKE_CURRENT_BINARY_DIR})"
+new_include = """target_include_directories(ggml-vulkan PRIVATE
+        ${CMAKE_CURRENT_BINARY_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/android-vulkan-headers
+    )"""
+if old_include not in cmake_text:
+    raise SystemExit("ggml-vulkan target include line not found")
+cmake_text = cmake_text.replace(old_include, new_include, 1)
 vulkan_cmake.write_text(cmake_text)
 
 cpp_text = cpp.read_text()
@@ -131,5 +158,7 @@ assert "cpu_state_before_gpu" in final_cpp
 assert "restore_sequence_state(g_context, cpu_state_before_gpu)" in final_cpp
 assert "find_package(SPIRV-Headers" not in final_cmake
 assert "unused SPIRV-Headers host package import removed" in final_cmake
+assert "android-vulkan-headers" in final_cmake
+assert (android_vulkan_headers / "vulkan.hpp").exists()
 
-print("GPU PP reliability patch applied: Android-safe Vulkan configure + transactional CPU KV fallback")
+print("GPU PP reliability patch applied: isolated Vulkan-Hpp headers + Android-safe configure + transactional CPU KV fallback")
