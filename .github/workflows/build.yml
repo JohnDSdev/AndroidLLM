@@ -52,12 +52,6 @@ jobs:
           python3 scripts/chatgpt_ui_patch.py
           python3 scripts/performance_patch.py
 
-      - name: Build CPU backend
-        run: gradle --no-daemon :llamaLib:externalNativeBuildDebug
-
-      - name: Stage CPU backend
-        run: python3 scripts/stage_cpu_backends.py
-
       - name: Test downloader
         run: gradle --no-daemon :app:testDebugUnitTest
 
@@ -67,21 +61,27 @@ jobs:
       - name: Stage APK
         run: cp app/build/outputs/apk/debug/app-debug.apk AndroidLLM.apk
 
-      - name: Verify packaged CPU backend
+      - name: Verify static CPU backend
         run: |
           unzip -l AndroidLLM.apk | tee apk-contents.txt
-          grep -q 'lib/arm64-v8a/libggml-cpu.so' apk-contents.txt
           grep -q 'lib/arm64-v8a/libai-chat.so' apk-contents.txt
-          grep -q 'lib/arm64-v8a/libggml.so' apk-contents.txt
-          grep -q 'lib/arm64-v8a/libggml-base.so' apk-contents.txt
+
+          # v0.5.0 failed because Android had to dlopen a separate CPU plugin.
+          # v0.5.1 must contain the CPU implementation inside libai-chat.so.
+          if grep -q 'lib/arm64-v8a/libggml-cpu.so' apk-contents.txt; then
+            echo "Unexpected dynamic libggml-cpu.so plugin found"
+            exit 1
+          fi
           if grep -q 'libggml-cpu-android_' apk-contents.txt; then
-            echo "Unexpected CPU_ALL_VARIANTS backend found; build no longer matches Termux"
+            echo "Unexpected runtime CPU variant plugin found"
             exit 1
           fi
 
           unzip -p AndroidLLM.apk lib/arm64-v8a/libai-chat.so > /tmp/libai-chat.so
-          strings /tmp/libai-chat.so | grep -q 'libggml-cpu.so'
-          strings /tmp/libai-chat.so | grep -q 'Loading CPU backend explicitly'
+          size=$(stat -c%s /tmp/libai-chat.so)
+          echo "Static libai-chat.so size: $size bytes"
+          test "$size" -gt 50000000
+          strings /tmp/libai-chat.so | grep -q 'AndroidLLM started without a registered llama.cpp backend'
 
       - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
@@ -100,6 +100,6 @@ jobs:
           else
             gh release create dev-build AndroidLLM.apk \
               --title "AndroidLLM development build" \
-              --notes "Automated arm64 build using llama.cpp b10516, exact-path CPU backend registration, and the redesigned chat UI." \
+              --notes "Automated arm64 build using llama.cpp b10516 with the generic CPU backend linked directly into the app." \
               --prerelease
           fi
