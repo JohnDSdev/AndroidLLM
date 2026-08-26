@@ -60,6 +60,7 @@ jobs:
           python3 scripts/controls_gpu_patch.py
           python3 scripts/gpu_pp_reliability_patch.py
           python3 scripts/settings_message_ux_patch.py
+          python3 scripts/settings_controls_visibility_patch.py
 
       - name: Verify generated inference and UX
         run: |
@@ -86,6 +87,8 @@ jobs:
           grep -q 'store.resetGlobalSettings()' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'SheetAction("Save")' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'SheetAction("Reset"' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'SheetAction("Cancel")' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'settingsDialog.setCanceledOnTouchOutside(false)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'sectionLabel("Thinking")' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'formatVersion", 3' app/src/main/java/com/johndsdev/androidllm/AppStore.kt
 
