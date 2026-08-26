@@ -21,8 +21,14 @@ class AppStore(private val context: Context) {
             chats += chat
             currentChatId = chat.id
             save()
-        } else if (currentChatId == null || chats.none { it.id == currentChatId }) {
-            currentChatId = chats.first().id
+        } else {
+            if (currentChatId == null || chats.none { it.id == currentChatId }) {
+                currentChatId = chats.first().id
+            }
+            // v0.7.1 migrates the old per-chat controls to one persistent set.
+            // Preserve the settings of the chat the user was actually on.
+            synchronizeSettingsFrom(currentChat())
+            save()
         }
     }
 
@@ -31,7 +37,7 @@ class AppStore(private val context: Context) {
 
     @Synchronized
     fun newChat(): ChatSession {
-        val chat = makeChat()
+        val chat = makeChat(currentChat())
         chats.add(0, chat)
         currentChatId = chat.id
         save()
@@ -48,21 +54,72 @@ class AppStore(private val context: Context) {
 
     @Synchronized
     fun deleteChat(id: String) {
+        val settings = chats.firstOrNull { it.id == currentChatId } ?: chats.firstOrNull()
         chats.removeAll { it.id == id }
         if (chats.isEmpty()) {
-            val replacement = makeChat()
+            val replacement = makeChat(settings)
             chats += replacement
             currentChatId = replacement.id
         } else if (currentChatId == id) {
             currentChatId = chats.first().id
         }
+        if (settings != null) synchronizeSettingsFrom(settings)
         save()
+    }
+
+    /** Commit the settings sheet in one explicit Save action. */
+    @Synchronized
+    fun applyGlobalSettings(
+        systemPrompt: String,
+        contextLength: Int,
+        thinkingEnabled: Boolean,
+        generationThreads: Int,
+        promptThreads: Int,
+        batchSize: Int,
+        temperature: Float,
+        topK: Int,
+        topP: Float,
+        minP: Float,
+        gpuPromptProcessing: Boolean,
+    ) {
+        val source = currentChat()
+        source.systemPrompt = systemPrompt.ifBlank { DEFAULT_SYSTEM_PROMPT }
+        source.contextLength = contextLength.coerceIn(512, 131072)
+        source.thinkingEnabled = thinkingEnabled
+        source.generationThreads = generationThreads.coerceIn(1, 32)
+        source.promptThreads = promptThreads.coerceIn(1, 32)
+        source.batchSize = batchSize.coerceIn(32, 2048)
+        source.temperature = temperature.coerceIn(0f, 2f)
+        source.topK = topK.coerceIn(0, 200)
+        source.topP = topP.coerceIn(0f, 1f)
+        source.minP = minP.coerceIn(0f, 1f)
+        source.gpuPromptProcessing = gpuPromptProcessing
+        synchronizeSettingsFrom(source)
+        save()
+    }
+
+    /** Reset is explicit too. Nothing else silently restores defaults. */
+    @Synchronized
+    fun resetGlobalSettings() {
+        applyGlobalSettings(
+            systemPrompt = DEFAULT_SYSTEM_PROMPT,
+            contextLength = DEFAULT_CONTEXT_LENGTH,
+            thinkingEnabled = DEFAULT_THINKING,
+            generationThreads = DEFAULT_GENERATION_THREADS,
+            promptThreads = DEFAULT_PROMPT_THREADS,
+            batchSize = DEFAULT_BATCH_SIZE,
+            temperature = DEFAULT_TEMPERATURE,
+            topK = DEFAULT_TOP_K,
+            topP = DEFAULT_TOP_P,
+            minP = DEFAULT_MIN_P,
+            gpuPromptProcessing = DEFAULT_GPU_PP,
+        )
     }
 
     @Synchronized
     fun save() {
         val root = JSONObject()
-        root.put("formatVersion", 2)
+        root.put("formatVersion", 3)
         root.put("currentChatId", currentChatId)
         val chatArray = JSONArray()
         chats.forEach { chat ->
@@ -129,17 +186,17 @@ class AppStore(private val context: Context) {
                 chats += ChatSession(
                     id = obj.optString("id").ifBlank { UUID.randomUUID().toString() },
                     title = obj.optString("title", "New chat"),
-                    systemPrompt = obj.optString("systemPrompt", "You are a helpful assistant."),
-                    contextLength = obj.optInt("contextLength", 4096).coerceIn(512, 131072),
-                    thinkingEnabled = obj.optBoolean("thinkingEnabled", true),
-                    generationThreads = obj.optInt("generationThreads", 4).coerceIn(1, 32),
-                    promptThreads = obj.optInt("promptThreads", 6).coerceIn(1, 32),
-                    batchSize = obj.optInt("batchSize", 512).coerceIn(32, 2048),
-                    temperature = obj.optDouble("temperature", 0.8).toFloat().coerceIn(0f, 2f),
-                    topK = obj.optInt("topK", 40).coerceIn(0, 200),
-                    topP = obj.optDouble("topP", 0.95).toFloat().coerceIn(0f, 1f),
-                    minP = obj.optDouble("minP", 0.05).toFloat().coerceIn(0f, 1f),
-                    gpuPromptProcessing = obj.optBoolean("gpuPromptProcessing", false),
+                    systemPrompt = obj.optString("systemPrompt", DEFAULT_SYSTEM_PROMPT),
+                    contextLength = obj.optInt("contextLength", DEFAULT_CONTEXT_LENGTH).coerceIn(512, 131072),
+                    thinkingEnabled = obj.optBoolean("thinkingEnabled", DEFAULT_THINKING),
+                    generationThreads = obj.optInt("generationThreads", DEFAULT_GENERATION_THREADS).coerceIn(1, 32),
+                    promptThreads = obj.optInt("promptThreads", DEFAULT_PROMPT_THREADS).coerceIn(1, 32),
+                    batchSize = obj.optInt("batchSize", DEFAULT_BATCH_SIZE).coerceIn(32, 2048),
+                    temperature = obj.optDouble("temperature", DEFAULT_TEMPERATURE.toDouble()).toFloat().coerceIn(0f, 2f),
+                    topK = obj.optInt("topK", DEFAULT_TOP_K).coerceIn(0, 200),
+                    topP = obj.optDouble("topP", DEFAULT_TOP_P.toDouble()).toFloat().coerceIn(0f, 1f),
+                    minP = obj.optDouble("minP", DEFAULT_MIN_P.toDouble()).toFloat().coerceIn(0f, 1f),
+                    gpuPromptProcessing = obj.optBoolean("gpuPromptProcessing", DEFAULT_GPU_PP),
                     modelFile = if (obj.isNull("modelFile")) null else obj.optString("modelFile").takeIf { it.isNotBlank() },
                     messages = messages,
                 )
@@ -153,8 +210,40 @@ class AppStore(private val context: Context) {
         }
     }
 
-    private fun makeChat() = ChatSession(
+    private fun synchronizeSettingsFrom(source: ChatSession) {
+        chats.forEach { target -> copySettings(source, target) }
+    }
+
+    private fun copySettings(source: ChatSession, target: ChatSession) {
+        target.systemPrompt = source.systemPrompt
+        target.contextLength = source.contextLength
+        target.thinkingEnabled = source.thinkingEnabled
+        target.generationThreads = source.generationThreads
+        target.promptThreads = source.promptThreads
+        target.batchSize = source.batchSize
+        target.temperature = source.temperature
+        target.topK = source.topK
+        target.topP = source.topP
+        target.minP = source.minP
+        target.gpuPromptProcessing = source.gpuPromptProcessing
+    }
+
+    private fun makeChat(template: ChatSession? = null) = ChatSession(
         id = UUID.randomUUID().toString(),
         title = "New chat",
-    )
+    ).also { chat -> if (template != null) copySettings(template, chat) }
+
+    companion object {
+        const val DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant."
+        const val DEFAULT_CONTEXT_LENGTH = 4096
+        const val DEFAULT_THINKING = true
+        const val DEFAULT_GENERATION_THREADS = 4
+        const val DEFAULT_PROMPT_THREADS = 6
+        const val DEFAULT_BATCH_SIZE = 512
+        const val DEFAULT_TEMPERATURE = 0.8f
+        const val DEFAULT_TOP_K = 40
+        const val DEFAULT_TOP_P = 0.95f
+        const val DEFAULT_MIN_P = 0.05f
+        const val DEFAULT_GPU_PP = false
+    }
 }
