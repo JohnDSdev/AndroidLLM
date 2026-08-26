@@ -11,8 +11,8 @@ android {
         applicationId = "com.johndsdev.androidllm"
         minSdk = 33
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.7.0"
+        versionCode = 13
+        versionName = "0.7.1"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -61,6 +61,7 @@ dependencies {
     implementation(libs.bundles.androidx)
     implementation(libs.material)
     implementation(libs.kotlinx.coroutines.android)
+    implementation("androidx.drawerlayout:drawerlayout:1.2.0")
     implementation("io.noties.markwon:core:4.6.2")
 
     testImplementation(libs.junit)
