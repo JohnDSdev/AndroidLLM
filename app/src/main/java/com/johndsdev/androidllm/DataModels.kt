@@ -19,7 +19,9 @@ data class ChatSession(
     var topK: Int = 40,
     var topP: Float = 0.95f,
     var minP: Float = 0.05f,
+    // Kept only for reading old v0.7.x data. GPU PP is disabled in v0.7.2.
     var gpuPromptProcessing: Boolean = false,
+    var prettyMode: Boolean = false,
     var modelFile: String? = null,
     val messages: MutableList<ChatMessage> = mutableListOf(),
 )

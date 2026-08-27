@@ -25,8 +25,8 @@ class AppStore(private val context: Context) {
             if (currentChatId == null || chats.none { it.id == currentChatId }) {
                 currentChatId = chats.first().id
             }
-            // v0.7.1 migrates the old per-chat controls to one persistent set.
-            // Preserve the settings of the chat the user was actually on.
+            // Settings are global. Preserve the settings of the chat the user was
+            // actually on, then synchronize them to every other chat.
             synchronizeSettingsFrom(currentChat())
             save()
         }
@@ -80,7 +80,7 @@ class AppStore(private val context: Context) {
         topK: Int,
         topP: Float,
         minP: Float,
-        gpuPromptProcessing: Boolean,
+        prettyMode: Boolean,
     ) {
         val source = currentChat()
         source.systemPrompt = systemPrompt.ifBlank { DEFAULT_SYSTEM_PROMPT }
@@ -93,7 +93,8 @@ class AppStore(private val context: Context) {
         source.topK = topK.coerceIn(0, 200)
         source.topP = topP.coerceIn(0f, 1f)
         source.minP = minP.coerceIn(0f, 1f)
-        source.gpuPromptProcessing = gpuPromptProcessing
+        source.prettyMode = prettyMode
+        source.gpuPromptProcessing = false
         synchronizeSettingsFrom(source)
         save()
     }
@@ -112,14 +113,14 @@ class AppStore(private val context: Context) {
             topK = DEFAULT_TOP_K,
             topP = DEFAULT_TOP_P,
             minP = DEFAULT_MIN_P,
-            gpuPromptProcessing = DEFAULT_GPU_PP,
+            prettyMode = DEFAULT_PRETTY_MODE,
         )
     }
 
     @Synchronized
     fun save() {
         val root = JSONObject()
-        root.put("formatVersion", 3)
+        root.put("formatVersion", 4)
         root.put("currentChatId", currentChatId)
         val chatArray = JSONArray()
         chats.forEach { chat ->
@@ -136,7 +137,7 @@ class AppStore(private val context: Context) {
             obj.put("topK", chat.topK)
             obj.put("topP", chat.topP.toDouble())
             obj.put("minP", chat.minP.toDouble())
-            obj.put("gpuPromptProcessing", chat.gpuPromptProcessing)
+            obj.put("prettyMode", chat.prettyMode)
             obj.put("modelFile", chat.modelFile ?: JSONObject.NULL)
             val messageArray = JSONArray()
             chat.messages.forEach { message ->
@@ -196,7 +197,8 @@ class AppStore(private val context: Context) {
                     topK = obj.optInt("topK", DEFAULT_TOP_K).coerceIn(0, 200),
                     topP = obj.optDouble("topP", DEFAULT_TOP_P.toDouble()).toFloat().coerceIn(0f, 1f),
                     minP = obj.optDouble("minP", DEFAULT_MIN_P.toDouble()).toFloat().coerceIn(0f, 1f),
-                    gpuPromptProcessing = obj.optBoolean("gpuPromptProcessing", DEFAULT_GPU_PP),
+                    gpuPromptProcessing = false,
+                    prettyMode = obj.optBoolean("prettyMode", DEFAULT_PRETTY_MODE),
                     modelFile = if (obj.isNull("modelFile")) null else obj.optString("modelFile").takeIf { it.isNotBlank() },
                     messages = messages,
                 )
@@ -225,7 +227,8 @@ class AppStore(private val context: Context) {
         target.topK = source.topK
         target.topP = source.topP
         target.minP = source.minP
-        target.gpuPromptProcessing = source.gpuPromptProcessing
+        target.prettyMode = source.prettyMode
+        target.gpuPromptProcessing = false
     }
 
     private fun makeChat(template: ChatSession? = null) = ChatSession(
@@ -244,6 +247,6 @@ class AppStore(private val context: Context) {
         const val DEFAULT_TOP_K = 40
         const val DEFAULT_TOP_P = 0.95f
         const val DEFAULT_MIN_P = 0.05f
-        const val DEFAULT_GPU_PP = false
+        const val DEFAULT_PRETTY_MODE = false
     }
 }
