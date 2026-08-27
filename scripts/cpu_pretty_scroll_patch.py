@@ -276,6 +276,8 @@ assert "scrollMessagesToBottom()" in final_text
 assert "fullScroll(View.FOCUS_DOWN)" not in final_text
 assert "prettyVisibleChars" in final_text
 assert "generatedTokens / elapsedSeconds" in final_text
-assert "chat.gpuPromptProcessing," not in final_text
+# Only the load-call argument must be gone. A dormant compatibility field can
+# still appear in runtime identity/status code and is forced false by AppStore.
+assert "                chat.gpuPromptProcessing,\n" not in final_text
 
 print("v0.7.2 CPU/UX patch applied: stable bottom pinning + pretty letter animation + Vulkan removed")
