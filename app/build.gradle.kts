@@ -11,8 +11,8 @@ android {
         applicationId = "com.johndsdev.androidllm"
         minSdk = 33
         targetSdk = 36
-        versionCode = 14
-        versionName = "0.7.2"
+        versionCode = 15
+        versionName = "0.7.3"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
