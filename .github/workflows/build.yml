@@ -57,13 +57,16 @@ jobs:
           python3 scripts/settings_controls_visibility_patch.py
           python3 scripts/cpu_pretty_scroll_patch.py
           python3 scripts/deprecate_gpu_offload_patch.py
+          python3 scripts/stable_cpu_perf_patch.py
+          python3 scripts/persistent_model_patch.py
 
       - name: Verify generated inference and UX
         run: |
-          grep -q 'GGML_CPU_ARM_ARCH=armv8.6-a+dotprod+fp16+i8mm' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
+          ! grep -q 'GGML_CPU_ARM_ARCH=' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
           grep -q 'GGML_VULKAN=OFF' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
           ! grep -q 'GGML_VULKAN=ON' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
-          grep -q 'set(GGML_CPU_KLEIDIAI ON)' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
+          grep -q 'set(GGML_CPU_KLEIDIAI OFF)' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
+          ! grep -q 'set(GGML_CPU_KLEIDIAI ON)' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
           grep -q 'cpu_params.n_gpu_layers = 0' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           grep -q 'g_gpu_pp_requested = false;' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           grep -q 'GPU prompt processing is deprecated and ignored' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
@@ -71,6 +74,13 @@ jobs:
           grep -q 'configured context window exhausted' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           ! grep -q 'Context full! Shifting' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           ! grep -q 'LOGv("id: %d' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
+
+          # Chat switching must keep the resident model and reset only conversation/KV state.
+          ! grep -q 'System prompt must be set \*\* RIGHT AFTER \*\* model loaded!' vendor/llama.cpp/examples/llama.android/lib/src/main/java/com/arm/aichat/internal/InferenceEngineImpl.kt
+          grep -q 'sameResidentModel' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'Switching chat…' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'private fun invalidateLoadedRuntime()' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'loadedRuntimeKey = key' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
 
           # Settings are staged/global and only committed through explicit controls.
           grep -q 'store.applyGlobalSettings(' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
@@ -188,6 +198,6 @@ jobs:
           else
             gh release create dev-build AndroidLLM.apk \
               --title "AndroidLLM development build" \
-              --notes "AndroidLLM 0.7.3: Vulkan/GPU prompt offload is deprecated and hard-disabled. The native build explicitly forces GGML_VULKAN=OFF and CI rejects Vulkan backend symbols; optimized CPU inference remains the supported path." \
+              --notes "AndroidLLM 0.7.4: models stay resident across chat switches, conversation changes reset only KV/chat state, and the pre-v0.7 generic CPU path is restored with KleidiAI and Vulkan disabled." \
               --prerelease
           fi
