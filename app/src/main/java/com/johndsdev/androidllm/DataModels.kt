@@ -19,7 +19,7 @@ data class ChatSession(
     var topK: Int = 40,
     var topP: Float = 0.95f,
     var minP: Float = 0.05f,
-    // Kept only for reading old v0.7.x data. GPU PP is disabled in v0.7.2.
+    // Deprecated compatibility field for old v0.7.x data. v0.7.3+ always forces this false.
     var gpuPromptProcessing: Boolean = false,
     var prettyMode: Boolean = false,
     var modelFile: String? = null,
