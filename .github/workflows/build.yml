@@ -56,13 +56,17 @@ jobs:
           python3 scripts/settings_message_ux_patch.py
           python3 scripts/settings_controls_visibility_patch.py
           python3 scripts/cpu_pretty_scroll_patch.py
+          python3 scripts/deprecate_gpu_offload_patch.py
 
       - name: Verify generated inference and UX
         run: |
           grep -q 'GGML_CPU_ARM_ARCH=armv8.6-a+dotprod+fp16+i8mm' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
+          grep -q 'GGML_VULKAN=OFF' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
           ! grep -q 'GGML_VULKAN=ON' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
           grep -q 'set(GGML_CPU_KLEIDIAI ON)' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
           grep -q 'cpu_params.n_gpu_layers = 0' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
+          grep -q 'g_gpu_pp_requested = false;' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
+          grep -q 'GPU prompt processing is deprecated and ignored' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           grep -q 'stop_generation_position = g_context_size - OVERFLOW_HEADROOM' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           grep -q 'configured context window exhausted' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           ! grep -q 'Context full! Shifting' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
@@ -81,6 +85,7 @@ jobs:
           grep -q 'prettyMode = prettySwitch.isChecked' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'formatVersion", 4' app/src/main/java/com/johndsdev/androidllm/AppStore.kt
           ! grep -q 'Experimental GPU prompt processing' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          ! grep -q '                chat.gpuPromptProcessing,' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
 
           # Stable streaming Markdown and autoscroll.
           grep -q 'markwon.setMarkdown(it, snapshot)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
@@ -157,6 +162,15 @@ jobs:
           strings /tmp/libai-chat.so | grep -q 'AndroidLLM started without a registered llama.cpp backend'
           strings /tmp/libai-chat.so | grep -q 'configured context window exhausted'
 
+          # Do not trust only the Gradle flag. Reject the APK if actual Vulkan
+          # backend/pipeline markers leaked into the native library.
+          for marker in 'ggml_vk_' 'createComputePipeline' 'Vulkan_Host' 'vkCreateComputePipelines'; do
+            if strings /tmp/libai-chat.so | grep -Fq "$marker"; then
+              echo "Unexpected Vulkan backend marker in libai-chat.so: $marker"
+              exit 1
+            fi
+          done
+
       - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
         with:
@@ -174,6 +188,6 @@ jobs:
           else
             gh release create dev-build AndroidLLM.apk \
               --title "AndroidLLM development build" \
-              --notes "AndroidLLM 0.7.2: CPU-only optimized inference, stable streaming autoscroll, persistent Pretty mode, live Markdown, swipe chat drawer, and message/code actions." \
+              --notes "AndroidLLM 0.7.3: Vulkan/GPU prompt offload is deprecated and hard-disabled. The native build explicitly forces GGML_VULKAN=OFF and CI rejects Vulkan backend symbols; optimized CPU inference remains the supported path." \
               --prerelease
           fi
