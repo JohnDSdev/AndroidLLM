@@ -27,6 +27,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
@@ -88,8 +93,8 @@ jobs:
         working-directory: olauncher-build
         run: |
           set -o pipefail
-          chmod +x ./gradlew
-          ./gradlew --no-daemon assembleDebug 2>&1 | tee "$GITHUB_WORKSPACE/gradle-build.log"
+          gradle --version
+          gradle --no-daemon assembleDebug 2>&1 | tee "$GITHUB_WORKSPACE/gradle-build.log"
 
       - name: Annotate Gradle compiler errors
         if: steps.gradle_build.outcome == 'failure'
