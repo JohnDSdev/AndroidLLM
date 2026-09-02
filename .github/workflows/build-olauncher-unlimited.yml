@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -81,8 +81,6 @@ jobs:
           copy_matrix_font 'MatrixSansScreen-Regular' 'matrix_sans_screen.ttf'
           copy_matrix_font 'MatrixSansVideo-Regular' 'matrix_sans_video.ttf'
 
-          ls -lh "$FONT_DIR"
-
       - name: Build debug APK
         id: gradle_build
         continue-on-error: true
@@ -93,14 +91,20 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon assembleDebug 2>&1 | tee "$GITHUB_WORKSPACE/gradle-build.log"
 
-      - name: Upload Gradle build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: olauncher-gradle-build-log
-          path: gradle-build.log
-          if-no-files-found: warn
-          retention-days: 7
+      - name: Persist Gradle log on isolated branch
+        if: steps.gradle_build.outcome == 'failure'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin build-olauncher-unlimited-20260902
+          git worktree add /tmp/olauncher-log origin/build-olauncher-unlimited-20260902
+          cp gradle-build.log /tmp/olauncher-log/.olauncher-build/last-gradle-build.log
+          cd /tmp/olauncher-log
+          git add .olauncher-build/last-gradle-build.log
+          git commit -m 'Capture Olauncher Gradle failure log'
+          git push origin HEAD:build-olauncher-unlimited-20260902
 
       - name: Stop after Gradle failure
         if: steps.gradle_build.outcome == 'failure'
