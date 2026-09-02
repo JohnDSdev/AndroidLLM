@@ -39,7 +39,7 @@ jobs:
         shell: bash
         run: |
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-35;google_apis;x86_64"
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
       - name: Reconstruct modified Olauncher source
         shell: bash
@@ -176,23 +176,27 @@ jobs:
           "$BUILD_TOOLS/aapt" dump badging artifact/Olauncher-Font-Picker-v6.7.1-fonts4-unlimited2.apk | head -n 12 | tee artifact/APK-BADGING.txt
           sha256sum artifact/Olauncher-Font-Picker-v6.7.1-fonts4-unlimited2.apk | tee artifact/SHA256SUMS.txt
 
-      - name: Create Android 35 emulator
+      - name: Enable KVM
         shell: bash
         run: |
-          set -euo pipefail
-          echo no | avdmanager create avd --force --name test35 --package "system-images;android-35;google_apis;x86_64"
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
 
-      - name: Boot emulator and install APK
-        shell: bash
-        working-directory: olauncher-build
-        run: |
-          set -euo pipefail
-          nohup emulator -avd test35 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel off >/tmp/emulator.log 2>&1 &
-          adb wait-for-device
-          timeout 240 bash -c 'until [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" == "1" ]]; do sleep 3; done'
-          adb install -r artifact/Olauncher-Font-Picker-v6.7.1-fonts4-unlimited2.apk | tee artifact/ADB-INSTALL.txt
-          adb shell pm path app.olauncher.fontpicker.unlimited | tee artifact/ADB-PACKAGE-PATH.txt
-          grep -q '^package:' artifact/ADB-PACKAGE-PATH.txt
+      - name: Install APK on clean Android 35 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            set -euo pipefail
+            adb install -r olauncher-build/artifact/Olauncher-Font-Picker-v6.7.1-fonts4-unlimited2.apk | tee olauncher-build/artifact/ADB-INSTALL.txt
+            adb shell pm path app.olauncher.fontpicker.unlimited | tee olauncher-build/artifact/ADB-PACKAGE-PATH.txt
+            grep -q '^package:' olauncher-build/artifact/ADB-PACKAGE-PATH.txt
 
       - name: Upload install-tested APK
         uses: actions/upload-artifact@v4
