@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - build-olauncher-unlimited-20260902
+  pull_request:
+    branches:
+      - build-olauncher-unlimited-20260902
   workflow_dispatch:
 
 permissions:
