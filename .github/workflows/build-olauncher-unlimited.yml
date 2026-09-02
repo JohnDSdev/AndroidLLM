@@ -193,9 +193,11 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
-            set -euo pipefail
-            adb install -r olauncher-build/artifact/Olauncher-Font-Picker-v6.7.1-fonts4-unlimited2.apk | tee olauncher-build/artifact/ADB-INSTALL.txt
-            adb shell pm path app.olauncher.fontpicker.unlimited | tee olauncher-build/artifact/ADB-PACKAGE-PATH.txt
+            adb install -r olauncher-build/artifact/Olauncher-Font-Picker-v6.7.1-fonts4-unlimited2.apk > olauncher-build/artifact/ADB-INSTALL.txt
+            cat olauncher-build/artifact/ADB-INSTALL.txt
+            grep -q 'Success' olauncher-build/artifact/ADB-INSTALL.txt
+            adb shell pm path app.olauncher.fontpicker.unlimited > olauncher-build/artifact/ADB-PACKAGE-PATH.txt
+            cat olauncher-build/artifact/ADB-PACKAGE-PATH.txt
             grep -q '^package:' olauncher-build/artifact/ADB-PACKAGE-PATH.txt
 
       - name: Upload install-tested APK
