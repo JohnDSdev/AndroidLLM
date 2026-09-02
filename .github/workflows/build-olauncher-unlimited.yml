@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -91,20 +91,22 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon assembleDebug 2>&1 | tee "$GITHUB_WORKSPACE/gradle-build.log"
 
-      - name: Persist Gradle log on isolated branch
+      - name: Annotate Gradle compiler errors
         if: steps.gradle_build.outcome == 'failure'
         shell: bash
         run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git fetch origin build-olauncher-unlimited-20260902
-          git worktree add /tmp/olauncher-log origin/build-olauncher-unlimited-20260902
-          cp gradle-build.log /tmp/olauncher-log/.olauncher-build/last-gradle-build.log
-          cd /tmp/olauncher-log
-          git add .olauncher-build/last-gradle-build.log
-          git commit -m 'Capture Olauncher Gradle failure log'
-          git push origin HEAD:build-olauncher-unlimited-20260902
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          lines = Path('gradle-build.log').read_text(errors='replace').splitlines()
+          patterns = re.compile(r'(^e: |\berror:|Compilation error|Unresolved reference|Type mismatch|Cannot infer|Overload resolution ambiguity|None of the following candidates|What went wrong)', re.I)
+          picked = [line for line in lines if patterns.search(line)]
+          if not picked:
+              picked = lines[-80:]
+          for line in picked[-100:]:
+              safe = line.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print(f'::error::{safe}')
+          PY
 
       - name: Stop after Gradle failure
         if: steps.gradle_build.outcome == 'failure'
