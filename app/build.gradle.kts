@@ -11,8 +11,8 @@ android {
         applicationId = "com.johndsdev.androidllm"
         minSdk = 33
         targetSdk = 36
-        versionCode = 16
-        versionName = "0.7.4"
+        versionCode = 17
+        versionName = "0.8.0"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -43,6 +43,8 @@ android {
         }
     }
 
+    testOptions { unitTests.isIncludeAndroidResources = true }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -61,10 +63,12 @@ dependencies {
     implementation(libs.bundles.androidx)
     implementation(libs.material)
     implementation(libs.kotlinx.coroutines.android)
+    implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.drawerlayout:drawerlayout:1.2.0")
     implementation("io.noties.markwon:core:4.6.2")
 
     testImplementation(libs.junit)
+    testImplementation("org.robolectric:robolectric:4.16.1")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

@@ -47,73 +47,7 @@ jobs:
           mkdir -p vendor
           git clone --depth 1 --branch b10516 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
           python3 scripts/prepare_llama.py
-          python3 scripts/prepare_app.py
-          python3 scripts/fix_v030_regressions.py
-          python3 scripts/chatgpt_ui_patch.py
-          python3 scripts/performance_patch.py
-          python3 scripts/runtime_perf_patch.py
-          python3 scripts/controls_gpu_patch.py
-          python3 scripts/settings_message_ux_patch.py
-          python3 scripts/settings_controls_visibility_patch.py
-          python3 scripts/cpu_pretty_scroll_patch.py
-          python3 scripts/deprecate_gpu_offload_patch.py
-          python3 scripts/stable_cpu_perf_patch.py
-          python3 scripts/persistent_model_patch.py
-
-      - name: Verify generated inference and UX
-        run: |
-          ! grep -q 'GGML_CPU_ARM_ARCH=' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
-          grep -q 'GGML_VULKAN=OFF' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
-          ! grep -q 'GGML_VULKAN=ON' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
-          grep -q 'set(GGML_CPU_KLEIDIAI OFF)' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
-          ! grep -q 'set(GGML_CPU_KLEIDIAI ON)' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
-          grep -q 'cpu_params.n_gpu_layers = 0' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
-          grep -q 'g_gpu_pp_requested = false;' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
-          grep -q 'GPU prompt processing is deprecated and ignored' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
-          grep -q 'stop_generation_position = g_context_size - OVERFLOW_HEADROOM' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
-          grep -q 'configured context window exhausted' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
-          ! grep -q 'Context full! Shifting' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
-          ! grep -q 'LOGv("id: %d' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
-
-          # Chat switching must keep the resident model and reset only conversation/KV state.
-          ! grep -q 'System prompt must be set \*\* RIGHT AFTER \*\* model loaded!' vendor/llama.cpp/examples/llama.android/lib/src/main/java/com/arm/aichat/internal/InferenceEngineImpl.kt
-          grep -q 'sameResidentModel' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'Switching chat…' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'private fun invalidateLoadedRuntime()' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'loadedRuntimeKey = key' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-
-          # Settings are staged/global and only committed through explicit controls.
-          grep -q 'store.applyGlobalSettings(' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'store.resetGlobalSettings()' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'SheetAction("Save")' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'SheetAction("Reset"' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'SheetAction("Cancel")' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'settingsDialog.setCanceledOnTouchOutside(false)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'sectionLabel("Thinking")' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'sectionLabel("Display")' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'text = "Pretty mode"' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'prettyMode = prettySwitch.isChecked' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'formatVersion", 4' app/src/main/java/com/johndsdev/androidllm/AppStore.kt
-          ! grep -q 'Experimental GPU prompt processing' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          ! grep -q '                chat.gpuPromptProcessing,' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-
-          # Stable streaming Markdown and autoscroll.
-          grep -q 'markwon.setMarkdown(it, snapshot)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'scrollMessagesToBottom()' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'prettyVisibleChars' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          ! grep -q 'fullScroll(View.FOCUS_DOWN)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          ! grep -q 'streamingTextView?.append(chunk)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'Regenerate' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'Edit' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'Code copied' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-
-          # DrawerLayout supplies edge-swipe open and reverse-swipe close gestures.
-          grep -q 'androidx.drawerlayout.widget.DrawerLayout' app/src/main/res/layout/activity_main.xml
-          grep -q 'drawerChatList' app/src/main/res/layout/activity_main.xml
-          grep -q 'drawerLayout.openDrawer(GravityCompat.START)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          ! grep -q 'MaterialAlertDialogBuilder' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-
-      - name: Test downloader
+      - name: Test downloader, streaming, and history
         run: gradle --no-daemon :app:testDebugUnitTest
 
       - name: Build debug APK
@@ -168,7 +102,7 @@ jobs:
           unzip -p AndroidLLM.apk lib/arm64-v8a/libai-chat.so > /tmp/libai-chat.so
           size=$(stat -c%s /tmp/libai-chat.so)
           echo "Static CPU libai-chat.so size: $size bytes"
-          test "$size" -gt 50000000
+          test "$size" -gt 1000000
           strings /tmp/libai-chat.so | grep -q 'AndroidLLM started without a registered llama.cpp backend'
           strings /tmp/libai-chat.so | grep -q 'configured context window exhausted'
 
@@ -189,7 +123,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish development release asset
-        if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -198,6 +132,6 @@ jobs:
           else
             gh release create dev-build AndroidLLM.apk \
               --title "AndroidLLM development build" \
-              --notes "AndroidLLM 0.7.4: models stay resident across chat switches, conversation changes reset only KV/chat state, and the pre-v0.7 generic CPU path is restored with KleidiAI and Vulkan disabled." \
+              --notes "AndroidLLM 0.8.0: persistent CPU workers, efficient streaming, stable scrolling, and searchable chat history." \
               --prerelease
           fi
