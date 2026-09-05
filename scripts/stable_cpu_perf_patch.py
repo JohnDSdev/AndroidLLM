@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import runpy
 
 root = Path(__file__).resolve().parents[1]
+
+# cpu_pretty_scroll_patch.py deliberately owns the generated streaming renderer.
+# Apply the v0.7.5 delta-append/slow-Markdown patch after that script has run and
+# before the final generated-source verification/build steps.
+runpy.run_path(str(root / "scripts/streaming_markdown_perf_patch.py"), run_name="__main__")
+
 llama = root / "vendor" / "llama.cpp"
 gradle = llama / "examples/llama.android/lib/build.gradle.kts"
 cmake = llama / "examples/llama.android/lib/src/main/cpp/CMakeLists.txt"
