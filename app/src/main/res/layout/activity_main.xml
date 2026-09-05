@@ -140,7 +140,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <ScrollView
+        <com.johndsdev.androidllm.TranscriptScrollView
             android:id="@+id/messageScroll"
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -156,9 +156,24 @@
             <LinearLayout
                 android:id="@+id/messageContainer"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="wrap_content"
                 android:orientation="vertical" />
-        </ScrollView>
+        </com.johndsdev.androidllm.TranscriptScrollView>
+
+        <TextView
+            android:id="@+id/latestButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_gravity="center_horizontal"
+            android:background="@drawable/bg_context_chip"
+            android:gravity="center"
+            android:paddingHorizontal="18dp"
+            android:text="↓ Latest response"
+            android:textColor="@color/accent"
+            android:textSize="13sp"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone" />
 
         <LinearLayout
             android:id="@+id/statusContainer"
@@ -273,7 +288,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Chats"
+                android:text="Your chats"
                 android:textColor="@color/text_primary"
                 android:textSize="21sp"
                 android:textStyle="bold" />
@@ -289,19 +304,29 @@
                 app:cornerRadius="18dp" />
         </LinearLayout>
 
-        <ScrollView
+        <EditText
+            android:id="@+id/historySearch"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/bg_context_chip"
+            android:paddingHorizontal="14dp"
+            android:hint="Search conversations"
+            android:contentDescription="Search conversations"
+            android:inputType="text"
+            android:singleLine="true"
+            android:textSize="14sp"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_secondary" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/drawerChatList"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:clipToPadding="false"
-            android:overScrollMode="never"
-            android:paddingTop="8dp">
-
-            <LinearLayout
-                android:id="@+id/drawerChatList"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
-        </ScrollView>
+            android:paddingBottom="12dp"
+            android:overScrollMode="never" />
     </LinearLayout>
 </androidx.drawerlayout.widget.DrawerLayout>

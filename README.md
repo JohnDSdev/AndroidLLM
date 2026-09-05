@@ -1,30 +1,44 @@
 # AndroidLLM
 
-A basic on-device Android chat app built around the official `llama.cpp` Android binding.
+An on-device Android chat app for ARM64 GGUF models, using CPU-only llama.cpp inference.
 
-## Current features
+## Version 0.8.0
 
-- CPU-only ARM64 GGUF inference through `llama.cpp`
-- pinned to `llama.cpp` build `b10524`
-- download a model by pasting a direct `.gguf` URL
-- load, unload, delete, and switch downloaded models
-- multiple persistent local chats
-- per-chat system prompts
-- configurable context length (512–131072 tokens)
-- streaming responses
-- local JSON chat/settings storage
-- export all app data as a ZIP, including downloaded GGUF models
+- Persistent CPU worker pool: reuse threads across decode graphs, with separate configurable prompt/generation thread counts and sleeping idle workers.
+- Stream only new text at bounded intervals, avoiding repeated full-response Markdown parsing and character-by-character layout work. Pretty mode reveals small batches; Markdown and copyable code cards render when generation finishes.
+- Follow the latest response until the reader scrolls away; the **Latest response** control resumes following. Focus requests cannot move the transcript during generation.
+- Search conversation titles and messages, browse by recent activity/date groups, see previews, and rename chats from their options menu. History rows are recycled.
+- Refreshed light/dark palettes. Model weights remain resident when switching chats.
+- Keep partial responses on errors; report context overflow instead of silently returning an empty answer.
+
+Existing chats, settings, models, and the development signing identity are preserved. Context (512–131072), sampling, thinking controls, downloads, Stop, edit/regenerate, and ZIP export remain available.
 
 ## Build
 
-The GitHub Actions workflow clones the pinned `llama.cpp` source, applies the small Android-binding patch in `scripts/prepare_llama.py`, runs the downloader regression test, builds an ARM64 APK, and uploads it as an Actions artifact. Main-branch builds are also published to the `dev-build` GitHub prerelease.
+CI and local builds now use the checked-in app source directly. The old chain of source-rewriting scripts has been replaced by one reviewed patch for the upstream Android binding.
 
-For a local build, clone `llama.cpp` into `vendor/llama.cpp` at tag `b10524`, run `python3 scripts/prepare_llama.py`, install Android API 36 + NDK `29.0.13113456` + CMake `3.31.6`, then run Gradle `:app:assembleDebug` with Gradle 8.14.3.
+Toolchain: JDK 17, Gradle 8.14.3, Android API 36, build-tools 36.0.0, NDK 29.0.14206865, CMake 3.31.6.
+
+```sh
+git clone --depth 1 --branch b10516 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
+python3 scripts/prepare_llama.py
+gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+```
+
+`prepare_llama.py` checks upstream commit `b95502ba9aa0eb73a2f4fc8878d7fbe6a847a0b9` and applies `patches/android-binding.patch` idempotently. To edit the binding, modify the prepared `vendor/llama.cpp` checkout, then regenerate the patch with `git -C vendor/llama.cpp diff --binary > patches/android-binding.patch`. App UI changes belong directly in `app/src`.
+
+GitHub Actions runs regression tests, builds the APK, and uploads `AndroidLLM-apk`. Only main-branch builds update the `dev-build` prerelease. PR/branch builds do not replace that download.
+
+## Validation on a device
+
+CPU speed depends on model, quantization, device cores, context, and heat; no percentage speedup is claimed without measurements on the same phone. Compare the same GGUF and thread/settings values with a cold prompt and follow-up prompts; record time to first text and steady generation speed after warmup. The displayed tok/s is an estimate based on emitted text pieces, not exact native token accounting.
+
+For scrolling, generate an answer longer than a screen in both display modes. Check that the bottom stays steady, scrolling up stays put, **Latest response** returns to the end, and Stop/completion preserve position. Repeat with the keyboard open and with Markdown/code, emoji, and long saved conversations. Unit tests cover concurrent stream draining, Unicode, history search/grouping, and layout-driven scrolling under Robolectric.
 
 ## Development signing
 
-Development APKs use the checked-in `signing/androidllm-dev.keystore` so successive CI builds have the same signature and can update each other without deleting app data. This key is intentionally public and must never be used for a Play Store or other production release.
+The checked-in `signing/androidllm-dev.keystore` is intentionally public. It lets development APKs update each other without deleting app data and must not be used for a production/Play Store release.
 
-## Notes
+## Conversation restoration
 
-The upstream Android helper keeps live conversation state while a model stays loaded. If a model is unloaded, the app restores recent prior messages into the system prompt when loading again so the conversation can continue. This is a pragmatic first-version restoration path rather than a perfect KV-cache serialization system.
+The upstream binding retains live conversation/KV state while a model stays loaded. Switching conversations resets the KV state and restores recent messages through a bounded system-prompt transcript. This is not exact KV serialization or role-preserving chat-template replay.
