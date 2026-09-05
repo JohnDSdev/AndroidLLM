@@ -138,11 +138,11 @@ hot_new = '''                        synchronized(buffer) { buffer.append(token)
                                 }
 
                                 runOnUiThread {
-                                    streamingTextView?.let { view ->
+                                    streamingTextView?.let {
                                         if (snapshot != null) {
-                                            markwon.setMarkdown(view, snapshot)
+                                            markwon.setMarkdown(it, snapshot)
                                         } else if (delta.isNotEmpty()) {
-                                            view.append(delta)
+                                            it.append(delta)
                                         }
                                     }
                                     scrollMessagesToBottom()
@@ -162,8 +162,8 @@ assert "now - prettyLastMarkdownMs >= 180L" not in final_text
 assert "now - lastUi >= 120L" in final_text
 assert "now - lastMarkdownUi >= 900L" in final_text
 assert "now - prettyLastMarkdownMs >= 900L" in final_text
-assert "view.append(delta)" in final_text
-assert "markwon.setMarkdown(view, snapshot)" in final_text
+assert "it.append(delta)" in final_text
+assert "markwon.setMarkdown(it, snapshot)" in final_text
 assert "markdownFenceOpen" in final_text
 assert "prettyFenceOpen" in final_text
 
