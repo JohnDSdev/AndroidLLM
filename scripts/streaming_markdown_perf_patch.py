@@ -98,6 +98,7 @@ hot_old = '''                        synchronized(buffer) { buffer.append(token)
                             lastUi = now
                         }'''
 hot_new = '''                        synchronized(buffer) { buffer.append(token) }
+                        val now = System.currentTimeMillis()
                         if (!prettyEnabled) {
                             liveUiDelta.append(token)
 
@@ -117,7 +118,6 @@ hot_new = '''                        synchronized(buffer) { buffer.append(token)
                                 }
                             }
 
-                            val now = System.currentTimeMillis()
                             if (now - lastUi >= 120L) {
                                 val delta = liveUiDelta.toString()
                                 liveUiDelta.setLength(0)
