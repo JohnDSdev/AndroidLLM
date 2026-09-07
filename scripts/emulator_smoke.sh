@@ -15,3 +15,10 @@ adb shell pidof com.johndsdev.androidllm
 adb shell uiautomator dump /sdcard/window.xml
 adb pull /sdcard/window.xml emulator-window.xml
 adb exec-out screencap -p > emulator-screen.png
+
+adb install -r AndroidLLM-test.apk
+adb shell am instrument -w -r com.johndsdev.androidllm.test/androidx.test.runner.AndroidJUnitRunner | tee emulator-inference-test.txt
+grep -q 'OK (1 test)' emulator-inference-test.txt
+adb logcat -d > emulator-inference-logcat.txt
+! grep -qE 'FATAL EXCEPTION|Fatal signal|UnsatisfiedLinkError' emulator-inference-logcat.txt
+grep -q 'AndroidLLM persistent CPU pool:' emulator-inference-logcat.txt

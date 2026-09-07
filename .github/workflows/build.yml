@@ -60,6 +60,7 @@ jobs:
           python3 scripts/stable_cpu_perf_patch.py
           python3 scripts/persistent_model_patch.py
           python3 scripts/cpu_inference_fix.py
+          python3 scripts/cpu_startup_fix.py
 
       - name: Verify generated inference and UX
         run: |
@@ -118,6 +119,12 @@ jobs:
         run: |
           ! grep -q '@FastNative' vendor/llama.cpp/examples/llama.android/lib/src/main/java/com/arm/aichat/internal/InferenceEngineImpl.kt
 
+      - name: Fetch tiny inference test fixture
+        run: |
+          mkdir -p app/src/androidTest/assets
+          curl -fL --retry 3 https://huggingface.co/ggml-org/models/resolve/main/tinyllamas/stories260K.gguf -o app/src/androidTest/assets/stories260K.gguf
+          echo '270cba1bd5109f42d03350f60406024560464db173c0e387d91f0426d3bd256d  app/src/androidTest/assets/stories260K.gguf' | sha256sum -c
+
       - name: Test downloader
         run: gradle --no-daemon :app:testReleaseUnitTest
 
@@ -127,7 +134,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          gradle --no-daemon :app:assembleRelease 2>&1 | tee build-apk.log
+          gradle --no-daemon :app:assembleRelease :app:assembleReleaseAndroidTest 2>&1 | tee build-apk.log
 
       - name: Summarize failed APK build
         if: steps.build_apk.outcome == 'failure'
@@ -154,7 +161,9 @@ jobs:
         run: exit 1
 
       - name: Stage APK
-        run: cp app/build/outputs/apk/release/app-release.apk AndroidLLM.apk
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk AndroidLLM.apk
+          cp app/build/outputs/apk/androidTest/release/app-release-androidTest.apk AndroidLLM-test.apk
 
       - name: Verify static CPU backend
         run: |
@@ -193,7 +202,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AndroidLLM-apk
-          path: AndroidLLM.apk
+          path: |
+            AndroidLLM.apk
+            AndroidLLM-test.apk
           if-no-files-found: error
 
       - name: Publish development release asset
