@@ -1,0 +1,451 @@
+--- a/app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
++++ b/app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+@@ -64,7 +64,7 @@
+     private lateinit var statusView: TextView
+     private lateinit var downloadProgress: ProgressBar
+     private lateinit var modelCard: MaterialCardView
+-    private lateinit var messageScroll: ScrollView
++    private lateinit var messageScroll: TranscriptScrollView
+     private lateinit var messageContainer: LinearLayout
+     private lateinit var inputView: EditText
+     private lateinit var sendButton: ImageButton
+@@ -86,6 +86,7 @@
+     @Volatile private var loadedRuntimeKey: String? = null
+     @Volatile private var gpuPpActive = false
+     @Volatile private var streamingTextView: TextView? = null
++    @Volatile private var activeSearch: WebSearchTool? = null
+     private var currentModelDialog: Dialog? = null
+ 
+     override fun onCreate(savedInstanceState: Bundle?) {
+@@ -261,8 +262,11 @@
+ 
+                     if (isStreamingAssistant) {
+                         val body = markdownTextView().apply {
+-                            // Keep Markdown live even before the first generated token.
+-                            markwon.setMarkdown(this, message.content)
++                            // Streaming text must not gain selection focus or change length
++                            // when Markdown delimiters disappear. Format once at completion.
++                            setTextIsSelectable(false)
++                            isFocusable = false
++                            text = message.content
+                         }
+                         row.addView(body, LinearLayout.LayoutParams(
+                             LinearLayout.LayoutParams.MATCH_PARENT,
+@@ -559,16 +563,7 @@
+     }
+ 
+     private fun scrollMessagesToBottom() {
+-        messageContainer.post {
+-            messageScroll.postOnAnimation {
+-                val viewport = (messageScroll.height - messageScroll.paddingTop - messageScroll.paddingBottom)
+-                    .coerceAtLeast(0)
+-                val target = (messageContainer.height - viewport).coerceAtLeast(0)
+-                if (messageScroll.scrollY != target) {
+-                    messageScroll.scrollTo(0, target)
+-                }
+-            }
+-        }
++        if (messageScroll.following) messageScroll.followBottom()
+     }
+ 
+     private fun updateControls() {
+@@ -932,6 +927,16 @@
+             })
+         }
+ 
++        val searchSwitch = SwitchCompat(this).apply {
++            text = "Experimental web search"
++            isChecked = chat.webSearchEnabled
++            setTextColor(color(R.color.text_primary))
++        }
++        val expertsSwitch = SwitchCompat(this).apply {
++            text = "Optimized expert kernels"
++            isChecked = chat.fastExperts
++            setTextColor(color(R.color.text_primary))
++        }
+         val prettySwitch = SwitchCompat(this).apply {
+             text = "Pretty mode"
+             isChecked = chat.prettyMode
+@@ -961,6 +966,17 @@
+         box.addView(genThreadsBlock)
+         box.addView(ppThreadsBlock)
+         box.addView(batchBlock)
++        box.addView(expertsSwitch)
++        box.addView(TextView(this).apply {
++            text = "Repack MoE weights for faster CPU decoding. Uses extra RAM and loading time. Turn off if loading is slow or memory is tight."
++            setTextColor(color(R.color.text_secondary)); textSize = 12f
++        })
++        box.addView(sectionLabel("Tools"))
++        box.addView(searchSwitch)
++        box.addView(TextView(this).apply {
++            text = "Off by default. The model may send one query per message to Bing and read result snippets. Requires internet; reliability depends on the model and provider."
++            setTextColor(color(R.color.text_secondary)); textSize = 12f
++        })
+ 
+         box.addView(sectionLabel("Thinking"))
+         box.addView(thinkingCard)
+@@ -1006,6 +1022,8 @@
+                         topK = topKSlider.value.roundToInt(),
+                         topP = topPSlider.value,
+                         minP = minPSlider.value,
++                        webSearchEnabled = searchSwitch.isChecked,
++                        fastExperts = expertsSwitch.isChecked,
+                         prettyMode = prettySwitch.isChecked,
+                     )
+                     invalidateLoadedRuntime()
+@@ -1321,6 +1339,7 @@
+     private fun stopGeneration() {
+         if (!generating || stopRequested) return
+         stopRequested = true
++        activeSearch?.cancel()
+         engine.stopGeneration()
+         runOnUiThread {
+             updateControls()
+@@ -1342,218 +1361,115 @@
+             showModelsDialog()
+             return
+         }
+-
++        messageScroll.followBottom()
+         inputView.setText("")
++        stopRequested = false
+         setBusy(true, "Preparing model…")
+-        runOnUiThread { showStatus("Preparing model…", indeterminate = true) }
+-
++        val buffer = StringBuilder()
++        val handler = Handler(Looper.getMainLooper())
++        var shown = 0
++        var finished = false // accessed only on UI thread
++        val reveal = object : Runnable {
++            override fun run() {
++                if (finished || isDestroyed) return
++                val delta = synchronized(buffer) {
++                    var end = if (chat.prettyMode) (shown + 8).coerceAtMost(buffer.length) else buffer.length
++                    if (end < buffer.length && end > shown && Character.isHighSurrogate(buffer[end - 1])) end++
++                    buffer.substring(shown, end).also { shown = end }
++                }
++                if (delta.isNotEmpty()) streamingTextView?.append(delta)
++                handler.postDelayed(this, if (chat.prettyMode) 32L else 80L)
++            }
++        }
+         Thread {
+             var assistant: ChatMessage? = null
++            var sources = emptyList<WebSearchTool.Result>()
++            var searchNote = ""
+             try {
+                 ensureModelLoaded(chat)
+-
+-                val userMessage = ChatMessage("user", text)
++                chat.messages += ChatMessage("user", text)
+                 assistant = ChatMessage("assistant", "")
+-                chat.messages += userMessage
+                 chat.messages += assistant
+-                if (chat.title == "New chat") {
+-                    chat.title = text.replace("\n", " ").take(42).ifBlank { "New chat" }
+-                }
++                if (chat.title == "New chat") chat.title = text.replace("\n", " ").take(42)
+                 store.save()
+-
+                 generating = true
+-                stopRequested = false
+                 lastTps = null
+                 runOnUiThread {
+                     renderHeader()
+                     renderMessages()
+                     updateControls()
+                     showStatus("Generating…", indeterminate = true)
+-                }
+-
+-                val buffer = StringBuilder()
+-                val prettyEnabled = chat.prettyMode
+-                val prettyVisibleChars = AtomicInteger(0)
+-                val prettyHandler = Handler(Looper.getMainLooper())
+-                var prettyLastMarkdownMs = System.currentTimeMillis()
+-                var prettyMarkdownSignalPending = false
+-                var prettyFenceOpen = false
+-                var prettyBacktickRun = 0
+-                lateinit var prettyRunnable: Runnable
+-                prettyRunnable = object : Runnable {
+-                    override fun run() {
+-                        val totalChars = synchronized(buffer) { buffer.length }
+-                        val visibleChars = prettyVisibleChars.get()
+-                        if (visibleChars < totalChars) {
+-                            val nextVisible = synchronized(buffer) {
+-                                var end = (visibleChars + if (totalChars - visibleChars > 48) 6 else 2)
+-                                    .coerceAtMost(buffer.length)
+-                                if (end < buffer.length && end > visibleChars &&
+-                                    Character.isHighSurrogate(buffer[end - 1])) end += 1
+-                                end
++                    handler.post(reveal)
++                }
++                var prompt = text
++                var round = 0
++                while (!stopRequested) {
++                    var pieces = 0
++                    var first = 0L
++                    var lastStats = 0L
++                    val response = StringBuilder()
++                    runBlocking {
++                        engine.sendUserPrompt(prompt, enableThinking = chat.thinkingEnabled).collect { token ->
++                            val now = System.nanoTime()
++                            if (first == 0L) first = now
++                            pieces++
++                            response.append(token)
++                            synchronized(buffer) { buffer.append(token) }
++                            // Stop promptly once a complete tool request has arrived.
++                            if (chat.webSearchEnabled && round == 0 && token.contains('>') &&
++                                WebSearchTool.requestedQuery(response.toString()) != null) engine.stopGeneration()
++                            if (stopRequested) engine.stopGeneration()
++                            if (pieces > 1 && now - lastStats >= 500_000_000L && now > first) {
++                                lastTps = (pieces - 1) * 1e9 / (now - first)
++                                val speed = lastTps!!
++                                runOnUiThread { if (!stopRequested) showStatus("Generating… ${formatTps(speed)} tok/s", indeterminate = true) }
++                                lastStats = now
+                             }
+-                            val nextChar = synchronized(buffer) {
+-                                buffer.substring(visibleChars, nextVisible)
+-                            }
+-                            streamingTextView?.append(nextChar)
+-                            prettyVisibleChars.set(nextVisible)
+-
+-                            for (visibleChar in nextChar) {
+-                            if (visibleChar == '`') {
+-                                prettyBacktickRun += 1
+-                                if (prettyBacktickRun == 3) {
+-                                    prettyFenceOpen = !prettyFenceOpen
+-                                    prettyMarkdownSignalPending = true
+-                                    prettyBacktickRun = 0
+-                                }
+-                            } else {
+-                                prettyBacktickRun = 0
+-                                if (visibleChar == '\n' || visibleChar == '*' || visibleChar == '#' || visibleChar == '_') {
+-                                    prettyMarkdownSignalPending = true
+-                                }
+-                            }
+-
+-                            }
+-                            val now = System.currentTimeMillis()
+-                            val syntaxRefreshDue =
+-                                prettyMarkdownSignalPending && now - prettyLastMarkdownMs >= 450L
+-                            val periodicRefreshDue = now - prettyLastMarkdownMs >= 900L
+-                            if (!prettyFenceOpen && (syntaxRefreshDue || periodicRefreshDue)) {
+-                                val visibleMarkdown = synchronized(buffer) {
+-                                    buffer.substring(0, nextVisible)
+-                                }
+-                                streamingTextView?.let { markwon.setMarkdown(it, visibleMarkdown) }
+-                                prettyMarkdownSignalPending = false
+-                                prettyLastMarkdownMs = now
+-                            }
+-                            scrollMessagesToBottom()
+-                        }
+-
+-                        val remaining = synchronized(buffer) { buffer.length } - prettyVisibleChars.get()
+-                        if (generating || remaining > 0) {
+-                            // No redraws faster than a display frame, including catch-up.
+-                            prettyHandler.postDelayed(this, 16L)
+                         }
+                     }
+-                }
+-                if (prettyEnabled) {
+-                    runOnUiThread { prettyHandler.post(prettyRunnable) }
+-                }
+-
+-                var lastUi = 0L
+-                val liveUiDelta = StringBuilder()
+-                var lastMarkdownUi = System.currentTimeMillis()
+-                var markdownSignalPending = false
+-                var markdownFenceOpen = false
+-                var markdownBacktickRun = 0
+-                var lastStatsUi = 0L
+-                var generatedTokens = 0
+-                var firstTokenNanos = 0L
+-                runBlocking {
+-                    engine.sendUserPrompt(text, enableThinking = chat.thinkingEnabled).collect { token ->
+-                        if (firstTokenNanos == 0L) firstTokenNanos = System.nanoTime()
+-                        generatedTokens++
+-                        synchronized(buffer) { buffer.append(token) }
+-                        val now = System.currentTimeMillis()
+-                        if (!prettyEnabled) {
+-                            liveUiDelta.append(token)
+-
+-                            for (ch in token) {
+-                                if (ch == '`') {
+-                                    markdownBacktickRun += 1
+-                                    if (markdownBacktickRun == 3) {
+-                                        markdownFenceOpen = !markdownFenceOpen
+-                                        markdownSignalPending = true
+-                                        markdownBacktickRun = 0
+-                                    }
+-                                } else {
+-                                    markdownBacktickRun = 0
+-                                    if (ch == '\n' || ch == '*' || ch == '#' || ch == '_') {
+-                                        markdownSignalPending = true
+-                                    }
+-                                }
+-                            }
+-
+-                            if (now - lastUi >= 120L) {
+-                                val delta = liveUiDelta.toString()
+-                                liveUiDelta.setLength(0)
+-
+-                                val syntaxRefreshDue =
+-                                    markdownSignalPending && now - lastMarkdownUi >= 450L
+-                                val periodicRefreshDue = now - lastMarkdownUi >= 900L
+-                                val shouldRefreshMarkdown =
+-                                    !markdownFenceOpen && (syntaxRefreshDue || periodicRefreshDue)
+-                                val snapshot = if (shouldRefreshMarkdown) {
+-                                    synchronized(buffer) { buffer.toString() }
+-                                } else {
+-                                    null
+-                                }
+-                                if (shouldRefreshMarkdown) {
+-                                    markdownSignalPending = false
+-                                    lastMarkdownUi = now
+-                                }
+-
+-                                runOnUiThread {
+-                                    streamingTextView?.let {
+-                                        if (snapshot != null) {
+-                                            markwon.setMarkdown(it, snapshot)
+-                                        } else if (delta.isNotEmpty()) {
+-                                            it.append(delta)
+-                                        }
+-                                    }
+-                                    scrollMessagesToBottom()
+-                                }
+-                                lastUi = now
+-                            }
+-                        }
+-                        if (firstTokenNanos != 0L && now - lastStatsUi >= 500L) {
+-                            val elapsedSeconds = (System.nanoTime() - firstTokenNanos) / 1_000_000_000.0
+-                            if (elapsedSeconds > 0.0) {
+-                                lastTps = generatedTokens / elapsedSeconds
+-                                val speed = lastTps!!
+-                                runOnUiThread {
+-                                    showStatus("Generating… ${formatTps(speed)} tok/s", indeterminate = true)
+-                                }
+-                            }
+-                            lastStatsUi = now
+-                        }
++                    if (pieces > 1 && first != 0L) lastTps = (pieces - 1) * 1e9 / (System.nanoTime() - first)
++                    val query = if (chat.webSearchEnabled && round == 0 && !stopRequested) WebSearchTool.requestedQuery(response.toString()) else null
++                    if (query == null) break
++                    val tool = WebSearchTool()
++                    activeSearch = tool
++                    if (stopRequested) { tool.cancel(); break }
++                    runOnUiThread { showStatus("Searching the web: $query", indeterminate = true) }
++                    var failure: String? = null
++                    try { sources = tool.search(query) } catch (e: Exception) { failure = e.message ?: "Search unavailable" }
++                    activeSearch = null
++                    if (stopRequested) break
++                    searchNote = if (failure != null) "Search failed: $failure" else if (sources.isEmpty()) "Search returned no results: $query" else "Searched the web: $query"
++                    prompt = WebSearchTool.resultPrompt(query, sources, failure)
++                    // Drain queued UI work and clear atomically before the next response.
++                    val reset = java.util.concurrent.CountDownLatch(1)
++                    runOnUiThread {
++                        synchronized(buffer) { buffer.setLength(0); shown = 0 }
++                        streamingTextView?.text = ""
++                        showStatus("Answering with search results…", indeterminate = true)
++                        reset.countDown()
+                     }
+-                }
+-                if (firstTokenNanos != 0L && generatedTokens > 0) {
+-                    val elapsedSeconds = (System.nanoTime() - firstTokenNanos) / 1_000_000_000.0
+-                    if (elapsedSeconds > 0.0) lastTps = generatedTokens / elapsedSeconds
+-                }
+-                if (prettyEnabled) {
+-                    // Let the letter animation catch the real model output before
+-                    // replacing the streaming view with the final rendered message.
+-                    val deadline = System.currentTimeMillis() + 1800L
+-                    while (
+-                        prettyVisibleChars.get() < synchronized(buffer) { buffer.length } &&
+-                        System.currentTimeMillis() < deadline
+-                    ) {
+-                        Thread.sleep(4L)
+-                    }
+-                }
+-                assistant.content = synchronized(buffer) { buffer.toString() }
++                    reset.await()
++                    round++
++                }
++                assistant.content = synchronized(buffer) { buffer.toString() } + buildString {
++                    if (searchNote.isNotEmpty()) append("\n\n---\n").append(searchNote)
++                    sources.forEachIndexed { index, result -> append("\n\n[${index + 1}] ${result.title}\n${result.url}") }
++                }
+                 store.save()
++            } catch (t: Throwable) {
++                assistant?.content = synchronized(buffer) { buffer.toString() } + "\n\n[generation failed: ${friendlyMessage(t)}]"
++                store.save()
++                invalidateLoadedConversation()
++                runOnUiThread { showError("Generation failed", t) }
++            } finally {
++                activeSearch = null
+                 generating = false
+                 stopRequested = false
+                 runOnUiThread {
+-                    prettyHandler.removeCallbacks(prettyRunnable)
++                    finished = true
++                    handler.removeCallbacks(reveal)
+                     setBusy(false)
+                     renderAll()
+-                }
+-            } catch (t: Throwable) {
+-                if (assistant != null && assistant.content.isBlank()) {
+-                    assistant.content = "[generation failed: ${friendlyMessage(t)}]"
+-                    store.save()
+-                }
+-                generating = false
+-                stopRequested = false
+-                runOnUiThread {
+-                    setBusy(false)
+-                    renderAll()
+-                    showError("Generation failed", t)
+                 }
+             }
+         }.start()
+@@ -1597,6 +1513,7 @@
+         runOnUiThread {
+             showStatus("Loading $name with ${formatContext(chat.contextLength)} context…", indeterminate = true)
+         }
++        android.system.Os.setenv("ANDROIDLLM_REPACK_EXPERTS", if (chat.fastExperts) "1" else "0", true)
+         runBlocking {
+             engine.loadModel(
+                 file.absolutePath,
+@@ -1659,6 +1576,7 @@
+ 
+     private fun runtimeKey(chat: ChatSession): String = listOf(
+         chat.contextLength,
++        chat.fastExperts,
+         chat.generationThreads,
+         chat.promptThreads,
+         chat.batchSize,
+@@ -1669,7 +1587,8 @@
+     ).joinToString("|")
+ 
+     private fun effectiveSystemPrompt(chat: ChatSession): String {
+-        val base = chat.systemPrompt.ifBlank { "You are a helpful assistant." }
++        val base = chat.systemPrompt.ifBlank { "You are a helpful assistant." } +
++            if (chat.webSearchEnabled) WebSearchTool.INSTRUCTIONS else ""
+         if (chat.messages.isEmpty()) return base
+ 
+         val transcript = buildString {
+--- a/app/src/main/res/layout/activity_main.xml
++++ b/app/src/main/res/layout/activity_main.xml
+@@ -140,7 +140,7 @@
+             </LinearLayout>
+         </com.google.android.material.card.MaterialCardView>
+ 
+-        <ScrollView
++        <com.johndsdev.androidllm.TranscriptScrollView
+             android:id="@+id/messageScroll"
+             android:layout_width="match_parent"
+             android:layout_height="0dp"
+@@ -158,7 +158,7 @@
+                 android:layout_width="match_parent"
+                 android:layout_height="match_parent"
+                 android:orientation="vertical" />
+-        </ScrollView>
++        </com.johndsdev.androidllm.TranscriptScrollView>
+ 
+         <LinearLayout
+             android:id="@+id/statusContainer"

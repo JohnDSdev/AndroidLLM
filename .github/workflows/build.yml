@@ -61,6 +61,7 @@ jobs:
           python3 scripts/persistent_model_patch.py
           python3 scripts/cpu_inference_fix.py
           python3 scripts/cpu_startup_fix.py
+          python3 scripts/inference_search_scroll.py
 
       - name: Verify generated inference and UX
         run: |
@@ -100,9 +101,9 @@ jobs:
           ! grep -q '                chat.gpuPromptProcessing,' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
 
           # Stable streaming Markdown and autoscroll.
-          grep -q 'markwon.setMarkdown(it, snapshot)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'handler.post(reveal)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'scrollMessagesToBottom()' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'prettyVisibleChars' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'WebSearchTool.requestedQuery' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           ! grep -q 'fullScroll(View.FOCUS_DOWN)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           ! grep -q 'streamingTextView?.append(chunk)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'Regenerate' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
