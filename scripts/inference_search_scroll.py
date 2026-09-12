@@ -12,3 +12,10 @@ s = '#include <cstdlib>\n' + s.replace(old, '''    const char * expert_repack = 
     if (ggml_n_dims(cur) > 2 && expert_repack && expert_repack[0] == '0') return nullptr;''')
 p.write_text(s)
 print('v0.7.7: selectable optimized MoE kernels, anchored streaming, opt-in model web search')
+
+# Keep device kernels optimized; use a native x86 sibling for emulator inference.
+# API 35 ARM translation cannot execute LSE atomics (LDADDAL).
+p = root / 'vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts'
+s = p.read_text()
+assert 'abiFilters += listOf("arm64-v8a")' in s
+p.write_text(s.replace('abiFilters += listOf("arm64-v8a")', 'abiFilters += listOf("arm64-v8a", "x86_64")'))

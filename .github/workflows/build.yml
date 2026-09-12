@@ -163,7 +163,8 @@ jobs:
 
       - name: Stage APK
         run: |
-          cp app/build/outputs/apk/release/app-release.apk AndroidLLM.apk
+          cp app/build/outputs/apk/release/app-arm64-v8a-release.apk AndroidLLM.apk
+          cp app/build/outputs/apk/release/app-x86_64-release.apk AndroidLLM-emulator.apk
           cp app/build/outputs/apk/androidTest/release/app-release-androidTest.apk AndroidLLM-test.apk
 
       - name: Verify static CPU backend
@@ -206,6 +207,7 @@ jobs:
           path: |
             AndroidLLM.apk
             AndroidLLM-test.apk
+            AndroidLLM-emulator.apk
           if-no-files-found: error
 
       - name: Publish development release asset
