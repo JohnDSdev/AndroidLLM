@@ -13,7 +13,7 @@ class TranscriptScrollView @JvmOverloads constructor(context: Context, attrs: At
         private set
     private var touching = false
     private var previousY = 0f
-    private val bottom: Int get() = ((getChildAt(0)?.height ?: 0) - height + paddingTop + paddingBottom).coerceAtLeast(0)
+    private val scrollRange: Int get() = ((getChildAt(0)?.height ?: 0) - height + paddingTop + paddingBottom).coerceAtLeast(0)
 
     fun followBottom() { following = true; requestLayout() }
 
@@ -38,13 +38,13 @@ class TranscriptScrollView @JvmOverloads constructor(context: Context, attrs: At
     override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) {
         super.onScrollChanged(l, t, oldl, oldt)
         if (touching && t < oldt) following = false
-        if (t > oldt && bottom - t <= 4) following = true
+        if (t > oldt && scrollRange - t <= 4) following = true
     }
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         val oldY = scrollY
         val pin = following
         super.onLayout(changed, l, t, r, b)
-        scrollTo(0, if (pin) bottom else oldY.coerceAtMost(bottom))
+        scrollTo(0, if (pin) scrollRange else oldY.coerceAtMost(scrollRange))
     }
     override fun requestChildRectangleOnScreen(child: View, rectangle: Rect, immediate: Boolean): Boolean = false
 }
