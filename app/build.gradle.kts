@@ -16,9 +16,6 @@ android {
         versionCode = 19
         versionName = "0.7.7"
 
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
-        }
     }
 
     splits {
