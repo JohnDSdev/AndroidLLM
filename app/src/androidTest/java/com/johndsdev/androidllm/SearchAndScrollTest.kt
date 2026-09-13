@@ -17,6 +17,11 @@ class SearchAndScrollTest {
         assertNull(WebSearchTool.requestedQuery("here is an example: <search>moon</search>"))
         assertNull(WebSearchTool.requestedQuery("<search> </search>"))
         assertNull(WebSearchTool.requestedQuery("<search>" + "a".repeat(241) + "</search>"))
+        val latch = WebSearchTool.RequestLatch()
+        latch.observe("<search>moon ice</search>")
+        latch.observe("<search>moon ice</search> buffered explanation")
+        assertEquals("moon ice", latch.query)
+        assertNull(WebSearchTool.requestedQuery("<search>moon ice</search> buffered explanation"))
         val xml = "<rss><channel>" + (1..12).joinToString("") { "<item><title>Source $it</title><link>https://example.com/$it</link><description>Evidence &amp; facts</description></item>" } + "</channel></rss>"
         val results = WebSearchTool.parseResults(xml)
         assertEquals(5, results.size)

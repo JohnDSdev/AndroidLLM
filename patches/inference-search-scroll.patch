@@ -101,7 +101,7 @@
          engine.stopGeneration()
          runOnUiThread {
              updateControls()
-@@ -1342,218 +1361,115 @@
+@@ -1342,218 +1361,118 @@
              showModelsDialog()
              return
          }
@@ -185,6 +185,7 @@
 +                    var first = 0L
 +                    var lastStats = 0L
 +                    val response = StringBuilder()
++                    val searchRequest = WebSearchTool.RequestLatch()
 +                    runBlocking {
 +                        engine.sendUserPrompt(prompt, enableThinking = chat.thinkingEnabled).collect { token ->
 +                            val now = System.nanoTime()
@@ -193,8 +194,12 @@
 +                            response.append(token)
 +                            synchronized(buffer) { buffer.append(token) }
 +                            // Stop promptly once a complete tool request has arrived.
-+                            if (chat.webSearchEnabled && round == 0 && token.contains('>') &&
-+                                WebSearchTool.requestedQuery(response.toString()) != null) engine.stopGeneration()
++                            if (chat.webSearchEnabled && round == 0 && token.contains('>')) {
++                                searchRequest.observe(response.toString())
++                                if (searchRequest.query != null) engine.stopGeneration()
+                             }
+-                            val nextChar = synchronized(buffer) {
+-                                buffer.substring(visibleChars, nextVisible)
 +                            if (stopRequested) engine.stopGeneration()
 +                            if (pieces > 1 && now - lastStats >= 500_000_000L && now > first) {
 +                                lastTps = (pieces - 1) * 1e9 / (now - first)
@@ -202,9 +207,6 @@
 +                                runOnUiThread { if (!stopRequested) showStatus("Generating… ${formatTps(speed)} tok/s", indeterminate = true) }
 +                                lastStats = now
                              }
--                            val nextChar = synchronized(buffer) {
--                                buffer.substring(visibleChars, nextVisible)
--                            }
 -                            streamingTextView?.append(nextChar)
 -                            prettyVisibleChars.set(nextVisible)
 -
@@ -328,7 +330,7 @@
 -                            lastStatsUi = now
 -                        }
 +                    if (pieces > 1 && first != 0L) lastTps = (pieces - 1) * 1e9 / (System.nanoTime() - first)
-+                    val query = if (chat.webSearchEnabled && round == 0 && !stopRequested) WebSearchTool.requestedQuery(response.toString()) else null
++                    val query = if (chat.webSearchEnabled && round == 0 && !stopRequested) searchRequest.query ?: WebSearchTool.requestedQuery(response.toString()) else null
 +                    if (query == null) break
 +                    val tool = WebSearchTool()
 +                    activeSearch = tool
@@ -403,7 +405,7 @@
                  }
              }
          }.start()
-@@ -1597,6 +1513,7 @@
+@@ -1597,6 +1516,7 @@
          runOnUiThread {
              showStatus("Loading $name with ${formatContext(chat.contextLength)} context…", indeterminate = true)
          }
@@ -411,7 +413,7 @@
          runBlocking {
              engine.loadModel(
                  file.absolutePath,
-@@ -1659,6 +1576,7 @@
+@@ -1659,6 +1579,7 @@
  
      private fun runtimeKey(chat: ChatSession): String = listOf(
          chat.contextLength,
@@ -419,7 +421,7 @@
          chat.generationThreads,
          chat.promptThreads,
          chat.batchSize,
-@@ -1669,7 +1587,8 @@
+@@ -1669,7 +1590,8 @@
      ).joinToString("|")
  
      private fun effectiveSystemPrompt(chat: ChatSession): String {
