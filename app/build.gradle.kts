@@ -6,16 +6,24 @@ plugins {
 android {
     namespace = "com.johndsdev.androidllm"
     compileSdk = 36
+    testBuildType = "release"
 
     defaultConfig {
         applicationId = "com.johndsdev.androidllm"
         minSdk = 33
         targetSdk = 36
-        versionCode = 16
-        versionName = "0.7.4"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        versionCode = 19
+        versionName = "0.7.7"
 
-        ndk {
-            abiFilters += listOf("arm64-v8a")
+    }
+
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = false
         }
     }
 

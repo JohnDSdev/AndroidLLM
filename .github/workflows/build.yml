@@ -59,10 +59,13 @@ jobs:
           python3 scripts/deprecate_gpu_offload_patch.py
           python3 scripts/stable_cpu_perf_patch.py
           python3 scripts/persistent_model_patch.py
+          python3 scripts/cpu_inference_fix.py
+          python3 scripts/cpu_startup_fix.py
+          python3 scripts/inference_search_scroll.py
 
       - name: Verify generated inference and UX
         run: |
-          ! grep -q 'GGML_CPU_ARM_ARCH=' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
+          grep -q 'GGML_CPU_ARM_ARCH=armv8.6-a+dotprod+fp16+i8mm' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
           grep -q 'GGML_VULKAN=OFF' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
           ! grep -q 'GGML_VULKAN=ON' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
           grep -q 'set(GGML_CPU_KLEIDIAI OFF)' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
@@ -98,9 +101,9 @@ jobs:
           ! grep -q '                chat.gpuPromptProcessing,' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
 
           # Stable streaming Markdown and autoscroll.
-          grep -q 'markwon.setMarkdown(it, snapshot)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'handler.post(reveal)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'scrollMessagesToBottom()' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'prettyVisibleChars' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'WebSearchTool.requestedQuery' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           ! grep -q 'fullScroll(View.FOCUS_DOWN)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           ! grep -q 'streamingTextView?.append(chunk)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'Regenerate' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
@@ -113,16 +116,26 @@ jobs:
           grep -q 'drawerLayout.openDrawer(GravityCompat.START)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           ! grep -q 'MaterialAlertDialogBuilder' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
 
-      - name: Test downloader
-        run: gradle --no-daemon :app:testDebugUnitTest
+      - name: Verify GC-safe JNI
+        run: |
+          ! grep -q '@FastNative' vendor/llama.cpp/examples/llama.android/lib/src/main/java/com/arm/aichat/internal/InferenceEngineImpl.kt
 
-      - name: Build debug APK
+      - name: Fetch tiny inference test fixture
+        run: |
+          mkdir -p app/src/androidTest/assets
+          curl -fL --retry 3 https://huggingface.co/ggml-org/models/resolve/main/tinyllamas/stories260K.gguf -o app/src/androidTest/assets/stories260K.gguf
+          echo '270cba1bd5109f42d03350f60406024560464db173c0e387d91f0426d3bd256d  app/src/androidTest/assets/stories260K.gguf' | sha256sum -c
+
+      - name: Test downloader
+        run: gradle --no-daemon :app:testReleaseUnitTest
+
+      - name: Build release APK
         id: build_apk
         continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
-          gradle --no-daemon :app:assembleDebug 2>&1 | tee build-apk.log
+          gradle --no-daemon :app:assembleRelease :app:assembleReleaseAndroidTest 2>&1 | tee build-apk.log
 
       - name: Summarize failed APK build
         if: steps.build_apk.outcome == 'failure'
@@ -149,7 +162,10 @@ jobs:
         run: exit 1
 
       - name: Stage APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk AndroidLLM.apk
+        run: |
+          cp app/build/outputs/apk/release/app-arm64-v8a-release.apk AndroidLLM.apk
+          cp app/build/outputs/apk/release/app-x86_64-release.apk AndroidLLM-emulator.apk
+          cp app/build/outputs/apk/androidTest/release/app-release-androidTest.apk AndroidLLM-test.apk
 
       - name: Verify static CPU backend
         run: |
@@ -168,7 +184,7 @@ jobs:
           unzip -p AndroidLLM.apk lib/arm64-v8a/libai-chat.so > /tmp/libai-chat.so
           size=$(stat -c%s /tmp/libai-chat.so)
           echo "Static CPU libai-chat.so size: $size bytes"
-          test "$size" -gt 50000000
+          test "$size" -gt 5000000
           strings /tmp/libai-chat.so | grep -q 'AndroidLLM started without a registered llama.cpp backend'
           strings /tmp/libai-chat.so | grep -q 'configured context window exhausted'
 
@@ -181,15 +197,21 @@ jobs:
             fi
           done
 
+      - name: Verify compiled ARM kernels
+        run: python3 scripts/verify_cpu_compile.py
+
       - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
         with:
           name: AndroidLLM-apk
-          path: AndroidLLM.apk
+          path: |
+            AndroidLLM.apk
+            AndroidLLM-test.apk
+            AndroidLLM-emulator.apk
           if-no-files-found: error
 
       - name: Publish development release asset
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -201,3 +223,35 @@ jobs:
               --notes "AndroidLLM 0.7.4: models stay resident across chat switches, conversation changes reset only KV/chat state, and the pre-v0.7 generic CPU path is restored with KleidiAI and Vulkan disabled." \
               --prerelease
           fi
+
+  emulator:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: AndroidLLM-apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and launch the delivery APK
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 4096M
+          heap-size: 512M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash scripts/emulator_smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: AndroidLLM-emulator-check
+          path: emulator-*
