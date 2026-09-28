@@ -101,7 +101,7 @@ jobs:
           grep -q 'sectionLabel("Display")' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'text = "Pretty mode"' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'prettyMode = prettySwitch.isChecked' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          grep -q 'formatVersion", 4' app/src/main/java/com/johndsdev/androidllm/AppStore.kt
+          grep -q 'formatVersion", 5' app/src/main/java/com/johndsdev/androidllm/AppStore.kt
           ! grep -q 'Experimental GPU prompt processing' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           ! grep -q '                chat.gpuPromptProcessing,' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
 
