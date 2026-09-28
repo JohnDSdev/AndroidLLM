@@ -34,8 +34,10 @@ jobs:
         with:
           gradle-version: '8.14.3'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Use runner Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          sdkmanager --version
 
       - name: Install Android toolchain
         run: |
