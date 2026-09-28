@@ -79,8 +79,13 @@ anchor = '''    g_batch = llama_batch_init(g_batch_size, 0, 1);'''
 s = replace(s, anchor, '''    // One persistent pool serves both prefill and decode. The graph plan picks
     // the active thread count, so idle prefill workers never compete with TG.
     auto pool_params = ggml_threadpool_params_default(std::max(g_generation_threads, g_prompt_threads));
-    pool_params.poll = 20;
+    // Single-token decode submits very short graphs. poll=20 lets Android put
+    // workers to sleep too eagerly between tokens, producing long-tail wakeup
+    // gaps. Use ggml's normal 50% polling balance and keep topology-aware
+    // workers strictly on the faster CPU cluster when that topology is known.
+    pool_params.poll = 50;
     pool_params.paused = true;
+    pool_params.strict_cpu = !fast_cpus.empty();
     for (int cpu : fast_cpus) pool_params.cpumask[cpu] = true;
     g_cpu_pool = ggml_threadpool_new(&pool_params);
     if (!g_cpu_pool) return 3;
