@@ -81,7 +81,7 @@ class AppStore(private val context: Context) {
         topP: Float,
         minP: Float,
         webSearchEnabled: Boolean = false,
-        fastExperts: Boolean = true,
+        fastExperts: Boolean = false,
         prettyMode: Boolean,
     ) {
         val source = currentChat()
@@ -124,7 +124,7 @@ class AppStore(private val context: Context) {
     @Synchronized
     fun save() {
         val root = JSONObject()
-        root.put("formatVersion", 4)
+        root.put("formatVersion", 5)
         root.put("currentChatId", currentChatId)
         val chatArray = JSONArray()
         chats.forEach { chat ->
@@ -176,6 +176,7 @@ class AppStore(private val context: Context) {
         if (!dataFile.exists()) return
         try {
             val root = JSONObject(dataFile.readText())
+            val formatVersion = root.optInt("formatVersion", 0)
             currentChatId = root.optString("currentChatId").takeIf { it.isNotBlank() }
             val chatArray = root.optJSONArray("chats") ?: JSONArray()
             for (i in 0 until chatArray.length()) {
@@ -205,7 +206,7 @@ class AppStore(private val context: Context) {
                     minP = obj.optDouble("minP", DEFAULT_MIN_P.toDouble()).toFloat().coerceIn(0f, 1f),
                     gpuPromptProcessing = false,
                     webSearchEnabled = obj.optBoolean("webSearchEnabled", false),
-                    fastExperts = obj.optBoolean("fastExperts", true),
+                    // v0.7.7 enabled full MoE expert repacking by default. On phones this can\n                    // add several GB of resident memory and cause random token stalls under\n                    // memory pressure. Migrate existing installs to the smooth mmap-backed path.\n                    fastExperts = if (formatVersion < 5) false else obj.optBoolean("fastExperts", false),
                     prettyMode = obj.optBoolean("prettyMode", DEFAULT_PRETTY_MODE),
                     modelFile = if (obj.isNull("modelFile")) null else obj.optString("modelFile").takeIf { it.isNotBlank() },
                     messages = messages,
