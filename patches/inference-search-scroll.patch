@@ -59,7 +59,7 @@
 +            setTextColor(color(R.color.text_primary))
 +        }
 +        val expertsSwitch = SwitchCompat(this).apply {
-+            text = "Optimized expert kernels"
++            text = "High-RAM expert repacking"
 +            isChecked = chat.fastExperts
 +            setTextColor(color(R.color.text_primary))
 +        }
@@ -72,7 +72,7 @@
          box.addView(batchBlock)
 +        box.addView(expertsSwitch)
 +        box.addView(TextView(this).apply {
-+            text = "Repack MoE weights for faster CPU decoding. Uses extra RAM and loading time. Turn off if loading is slow or memory is tight."
++            text = "Optional. Can raise average MoE speed, but uses several extra GB on large models and may cause long token stalls under Android memory pressure. Leave off for smoother generation."
 +            setTextColor(color(R.color.text_secondary)); textSize = 12f
 +        })
 +        box.addView(sectionLabel("Tools"))
