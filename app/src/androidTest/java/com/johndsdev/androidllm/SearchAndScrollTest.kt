@@ -38,15 +38,17 @@ class SearchAndScrollTest {
         val store = AppStore(context)
         store.resetGlobalSettings()
         assertFalse(store.currentChat().webSearchEnabled)
-        assertTrue(store.currentChat().fastExperts)
+        assertFalse(store.currentChat().fastExperts)
         store.currentChat().webSearchEnabled = true
-        store.currentChat().fastExperts = false
+        store.currentChat().fastExperts = true
         store.save()
         val reloaded = AppStore(context)
         assertTrue(reloaded.currentChat().webSearchEnabled)
-        assertFalse(reloaded.newChat().fastExperts)
+        assertTrue(reloaded.newChat().fastExperts)
         reloaded.resetGlobalSettings()
-        assertFalse(AppStore(context).currentChat().webSearchEnabled)
+        val reset = AppStore(context).currentChat()
+        assertFalse(reset.webSearchEnabled)
+        assertFalse(reset.fastExperts)
     }
 
     @Test fun tallStreamingMessagePinsBeforeDrawingAndIgnoresFocusRequests() {
