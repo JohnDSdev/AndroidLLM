@@ -22,7 +22,7 @@ data class ChatSession(
     // Deprecated compatibility field for old v0.7.x data. v0.7.3+ always forces this false.
     var gpuPromptProcessing: Boolean = false,
     var webSearchEnabled: Boolean = false,
-    var fastExperts: Boolean = true,
+    var fastExperts: Boolean = false,
     var prettyMode: Boolean = false,
     var modelFile: String? = null,
     val messages: MutableList<ChatMessage> = mutableListOf(),
