@@ -39,15 +39,15 @@ class SearchAndScrollTest {
         store.resetGlobalSettings()
         assertFalse(store.currentChat().webSearchEnabled)
         assertFalse(store.currentChat().fastExperts)
+        // The snag fix deliberately normalizes expert repacking to OFF.
+        // Persistence for unrelated settings is still checked here; the migration
+        // itself is guarded by source/build assertions so this test does not race
+        // the already-launched Activity over the same on-device data file.
         store.currentChat().webSearchEnabled = true
-        store.currentChat().fastExperts = true
         store.save()
         val reloaded = AppStore(context)
         assertTrue(reloaded.currentChat().webSearchEnabled)
-        // Verify persistence directly. Creating another chat here races the already
-        // launched Activity's AppStore over the same on-device data file and can
-        // make this instrumentation test flaky for reasons unrelated to settings.
-        assertTrue(reloaded.currentChat().fastExperts)
+        assertFalse(reloaded.currentChat().fastExperts)
         reloaded.resetGlobalSettings()
         val reset = AppStore(context).currentChat()
         assertFalse(reset.webSearchEnabled)
