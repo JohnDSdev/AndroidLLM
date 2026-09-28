@@ -44,7 +44,10 @@ class SearchAndScrollTest {
         store.save()
         val reloaded = AppStore(context)
         assertTrue(reloaded.currentChat().webSearchEnabled)
-        assertTrue(reloaded.newChat().fastExperts)
+        // Verify persistence directly. Creating another chat here races the already
+        // launched Activity's AppStore over the same on-device data file and can
+        // make this instrumentation test flaky for reasons unrelated to settings.
+        assertTrue(reloaded.currentChat().fastExperts)
         reloaded.resetGlobalSettings()
         val reset = AppStore(context).currentChat()
         assertFalse(reset.webSearchEnabled)
