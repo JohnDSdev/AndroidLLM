@@ -120,6 +120,14 @@ jobs:
         run: |
           ! grep -q '@FastNative' vendor/llama.cpp/examples/llama.android/lib/src/main/java/com/arm/aichat/internal/InferenceEngineImpl.kt
 
+      - name: Verify smooth decode defaults
+        run: |
+          grep -q 'pool_params.poll = 50' scripts/cpu_startup_fix.py
+          grep -q 'pool_params.strict_cpu = !fast_cpus.empty()' scripts/cpu_startup_fix.py
+          grep -q 'var fastExperts: Boolean = false' app/src/main/java/com/johndsdev/androidllm/DataModels.kt
+          grep -q 'root.put("formatVersion", 5)' app/src/main/java/com/johndsdev/androidllm/AppStore.kt
+          grep -q 'if (formatVersion < 5) false' app/src/main/java/com/johndsdev/androidllm/AppStore.kt
+
       - name: Fetch tiny inference test fixture
         run: |
           mkdir -p app/src/androidTest/assets
@@ -220,7 +228,7 @@ jobs:
           else
             gh release create dev-build AndroidLLM.apk \
               --title "AndroidLLM development build" \
-              --notes "AndroidLLM 0.7.4: models stay resident across chat switches, conversation changes reset only KV/chat state, and the pre-v0.7 generic CPU path is restored with KleidiAI and Vulkan disabled." \
+              --notes "AndroidLLM 0.7.8: smooth mobile decode defaults, lower long-tail worker wake latency, and high-RAM MoE expert repacking moved behind an explicit opt-in." \
               --prerelease
           fi
 
