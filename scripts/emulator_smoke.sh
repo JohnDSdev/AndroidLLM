@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 trap 'adb logcat -d > emulator-final-logcat.txt' EXIT
+adb root
+adb wait-for-device
 adb shell getprop ro.product.cpu.abilist | tee emulator-abis.txt
 adb install -r AndroidLLM.apk | tee emulator-install.txt
 adb logcat -c
@@ -32,3 +34,8 @@ grep -q 'AndroidLLM persistent CPU pool:' emulator-inference-logcat.txt
 adb install -r AndroidLLM.apk
 adb shell am instrument -w -r -e class com.johndsdev.androidllm.SearchAndScrollTest com.johndsdev.androidllm.test/androidx.test.runner.AndroidJUnitRunner | tee emulator-ui-test.txt
 grep -q 'OK (3 tests)' emulator-ui-test.txt
+adb shell am instrument -w -r -e class com.johndsdev.androidllm.BlueChatUiTest com.johndsdev.androidllm.test/androidx.test.runner.AndroidJUnitRunner | tee emulator-blue-ui-test.txt
+grep -q 'OK (2 tests)' emulator-blue-ui-test.txt
+for screen in home chats settings conversation; do
+  adb pull "/data/user/0/com.johndsdev.androidllm/files/ui-$screen.png" "emulator-ui-$screen.png"
+done
