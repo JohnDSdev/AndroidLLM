@@ -34,8 +34,13 @@ jobs:
         with:
           gradle-version: '8.14.3'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Use preinstalled Android SDK
+        shell: bash
+        run: |
+          # Hosted Ubuntu runners ship the SDK and cmdline-tools. The old
+          # setup-android v3 action now tries to install removed 'tools'.
+          echo "ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}" >> "$GITHUB_ENV"
+          echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
 
       - name: Install Android toolchain
         run: |
@@ -45,7 +50,7 @@ jobs:
       - name: Fetch released llama.cpp
         run: |
           mkdir -p vendor
-          git clone --depth 1 --branch b10516 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
+          git clone --depth 1 --branch b11454 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
           python3 scripts/prepare_llama.py
           python3 scripts/prepare_app.py
           python3 scripts/fix_v030_regressions.py
@@ -59,9 +64,15 @@ jobs:
           python3 scripts/deprecate_gpu_offload_patch.py
           python3 scripts/stable_cpu_perf_patch.py
           python3 scripts/persistent_model_patch.py
+          python3 scripts/k2_batch_compat.py
 
       - name: Verify generated inference and UX
         run: |
+          # The pinned llama.cpp checkout must include native K2 Horizon support.
+          test -s vendor/llama.cpp/src/models/k2-horizon.cpp
+          grep -q 'llama_model_k2_horizon::graph' vendor/llama.cpp/src/models/k2-horizon.cpp
+          grep -q 'g_batch = common_batch(g_context);' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
+          ! grep -q 'common_batch_clear\|common_batch_add\|llama_batch_init\|llama_batch_free' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           ! grep -q 'GGML_CPU_ARM_ARCH=' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
           grep -q 'GGML_VULKAN=OFF' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
           ! grep -q 'GGML_VULKAN=ON' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
@@ -201,3 +212,24 @@ jobs:
               --notes "AndroidLLM 0.7.4: models stay resident across chat switches, conversation changes reset only KV/chat state, and the pre-v0.7 generic CPU path is restored with KleidiAI and Vulkan disabled." \
               --prerelease
           fi
+
+  install-smoke:
+    name: Install ARM64 APK on emulator
+    needs: build
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Download built APK
+        uses: actions/download-artifact@v4
+        with:
+          name: AndroidLLM-apk
+
+      - name: Verify install on ARM64 Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: arm64-v8a
+          target: google_apis
+          script: |
+            adb install -r AndroidLLM.apk
+            adb shell pm path com.johndsdev.androidllm | grep -q '^package:'
