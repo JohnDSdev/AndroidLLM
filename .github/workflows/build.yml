@@ -230,6 +230,10 @@ jobs:
           api-level: 35
           arch: arm64-v8a
           target: google_apis
+          # GitHub's macOS M1 VM does not expose HVF nested virtualization.
+          # Use software CPU emulation rather than failing with HV_UNSUPPORTED.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -accel off
+          emulator-boot-timeout: 900
           script: |
             adb install -r AndroidLLM.apk
             adb shell pm path com.johndsdev.androidllm | grep -q '^package:'
