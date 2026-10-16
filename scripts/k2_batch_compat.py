@@ -34,6 +34,10 @@ replace_exact(
     "            batch.add(token_id, position, 0, want_logit);",
 )
 replace_exact(
+    "        const int decode_result = llama_decode(context, batch);",
+    "        const int decode_result = llama_process(context, LLAMA_PROCESS_TYPE_DECODE, batch.get());",
+)
+replace_exact(
     "    llama_batch_free(g_batch);",
     "    g_batch = common_batch();",
 )
