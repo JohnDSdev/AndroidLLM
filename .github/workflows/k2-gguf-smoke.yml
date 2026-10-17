@@ -24,7 +24,8 @@ jobs:
             -DGGML_VULKAN=OFF \
             -DGGML_OPENMP=OFF \
             -DLLAMA_BUILD_TESTS=OFF \
-            -DLLAMA_BUILD_EXAMPLES=ON \
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_TOOLS=ON \
             -DLLAMA_BUILD_SERVER=OFF \
             -DGGML_NATIVE=OFF
           cmake --build host-build --config Release --target llama-cli -j 3
