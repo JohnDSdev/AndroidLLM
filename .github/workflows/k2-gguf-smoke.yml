@@ -51,6 +51,8 @@ jobs:
             --ctx-size 512 \
             --n-predict 8 \
             --threads 2 \
+            --jinja \
+            --system-prompt 'You are a helpful assistant.' \
             --prompt 'Hi' \
             2>&1 | tee k2-smoke.log
           test ${PIPESTATUS[0]} -eq 0
