@@ -65,12 +65,14 @@ jobs:
           python3 scripts/stable_cpu_perf_patch.py
           python3 scripts/persistent_model_patch.py
           python3 scripts/k2_batch_compat.py
+          python3 scripts/k2_template_compat.py
 
       - name: Verify generated inference and UX
         run: |
           # The pinned llama.cpp checkout must include native K2 Horizon support.
           test -s vendor/llama.cpp/src/models/k2-horizon.cpp
           grep -q 'llama_model_k2_horizon::graph' vendor/llama.cpp/src/models/k2-horizon.cpp
+          grep -q 'for (const bool use_jinja : {preferred_jinja, !preferred_jinja})' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           grep -q 'g_batch = common_batch(g_context);' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           ! grep -q 'common_batch_clear\|common_batch_add\|llama_batch_init\|llama_batch_free' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           ! grep -q 'GGML_CPU_ARM_ARCH=' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts

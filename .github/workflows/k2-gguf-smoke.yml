@@ -1,0 +1,65 @@
+name: K2 Horizon GGUF load regression
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  k2-gguf-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out exact Android inference backend
+        run: git clone --depth 1 --branch b11454 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
+      - name: Build CPU-only llama-completion from pinned backend
+        run: |
+          cmake -S vendor/llama.cpp -B host-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_CUDA=OFF \
+            -DGGML_VULKAN=OFF \
+            -DGGML_OPENMP=OFF \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_TOOLS=ON \
+            -DLLAMA_BUILD_SERVER=OFF \
+            -DGGML_NATIVE=OFF
+          cmake --build host-build --config Release --target llama-completion -j 3
+      - name: Fetch official 0.9B Q4 GGUF
+        shell: bash
+        run: |
+          curl -fL --retry 4 --retry-delay 5 --max-time 600 \
+            -o k2-0.9b-q4.gguf \
+            'https://huggingface.co/IFM/K2-Horizon-0.9B-GGUF/resolve/main/K2-Horizon-1B-Q4_K_M.gguf?download=true'
+          python3 - <<'PY'
+          from pathlib import Path
+          model = Path('k2-0.9b-q4.gguf')
+          with model.open('rb') as handle:
+              assert handle.read(4) == b'GGUF', 'No GGUF magic'
+          assert model.stat().st_size > 300_000_000, 'Unexpectedly small GGUF'
+          print('GGUF size:', model.stat().st_size)
+          PY
+      - name: Load and generate from K2 Horizon GGUF
+        shell: bash
+        run: |
+          timeout 180 host-build/bin/llama-completion \
+            --model k2-0.9b-q4.gguf \
+            --ctx-size 512 \
+            --n-predict 8 \
+            --threads 2 \
+            --jinja \
+            --system-prompt 'You are a helpful assistant.' \
+            --prompt 'Hi' \
+            2>&1 | tee k2-smoke.log
+          test ${PIPESTATUS[0]} -eq 0
+      - name: Upload diagnostics if model fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k2-gguf-smoke-logs
+          path: k2-smoke.log
+          if-no-files-found: ignore
