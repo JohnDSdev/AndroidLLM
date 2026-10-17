@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check out exact Android inference backend
         run: git clone --depth 1 --branch b11454 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
-      - name: Build CPU-only llama-cli from pinned backend
+      - name: Build CPU-only llama-completion from pinned backend
         run: |
           cmake -S vendor/llama.cpp -B host-build \
             -DCMAKE_BUILD_TYPE=Release \
@@ -28,7 +28,7 @@ jobs:
             -DLLAMA_BUILD_TOOLS=ON \
             -DLLAMA_BUILD_SERVER=OFF \
             -DGGML_NATIVE=OFF
-          cmake --build host-build --config Release --target llama-cli -j 3
+          cmake --build host-build --config Release --target llama-completion -j 3
       - name: Fetch official 0.9B Q4 GGUF
         shell: bash
         run: |
@@ -46,7 +46,7 @@ jobs:
       - name: Load and generate from K2 Horizon GGUF
         shell: bash
         run: |
-          timeout 180 host-build/bin/llama-cli \
+          timeout 180 host-build/bin/llama-completion \
             --model k2-0.9b-q4.gguf \
             --ctx-size 512 \
             --n-predict 8 \
