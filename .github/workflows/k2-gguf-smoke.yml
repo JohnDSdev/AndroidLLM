@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check out exact Android inference backend
-        run: git clone --depth 1 --branch b11454 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
+        run: git clone --depth 1 --branch b11941 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
       - name: Build CPU-only llama-completion from pinned backend
         run: |
           cmake -S vendor/llama.cpp -B host-build \
