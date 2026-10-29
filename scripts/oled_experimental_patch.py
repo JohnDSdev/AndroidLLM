@@ -325,6 +325,17 @@ src = src[:a] + '''    private fun renderChatDrawer() {
 
 ''' + src[b:]
 # Preserve screen content but update package version for this experimental build.
+# Earlier UI scripts already import Color and ColorDrawable. Kotlin treats duplicate
+# imports as an error rather than politely ignoring them.
+seen_imports = set()
+unique_lines = []
+for line in src.splitlines(keepends=True):
+    if line.startswith("import "):
+        if line in seen_imports:
+            continue
+        seen_imports.add(line)
+    unique_lines.append(line)
+src = "".join(unique_lines)
 main.write_text(src)
 build = gradle.read_text()
 build = re.sub(r'versionCode = \d+', 'versionCode = 100', build, count=1)
