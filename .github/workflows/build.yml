@@ -198,7 +198,7 @@ jobs:
       - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AndroidLLM-OLED-experimental-apk
+          name: AndroidLLM-apk
           path: AndroidLLM.apk
           if-no-files-found: error
 
