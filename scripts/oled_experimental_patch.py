@@ -340,7 +340,20 @@ main.write_text(src)
 build = gradle.read_text()
 build = re.sub(r'versionCode = \d+', 'versionCode = 100', build, count=1)
 build = re.sub(r'versionName = "[^"]+"', 'versionName = "0.8.0-oled-experimental"', build, count=1)
+# Keep the experimental APK alongside the working 0.7.10 LFM3 installation.
+# The main repository's pinned backend predates the special LFM3 native build.
+old_debug = '        debug {\n            isMinifyEnabled = false'
+if old_debug not in build:
+    raise SystemExit("Debug app-id suffix anchor not found")
+build = build.replace(old_debug,
+    '        debug {\n            applicationIdSuffix = ".oled"\n            isMinifyEnabled = false', 1)
 gradle.write_text(build)
+manifest = root / "app/src/main/AndroidManifest.xml"
+manifest_xml = manifest.read_text()
+if 'android:label="AndroidLLM"' not in manifest_xml:
+    raise SystemExit("app label anchor missing")
+manifest.write_text(manifest_xml.replace('android:label="AndroidLLM"',
+                                        'android:label="AndroidLLM OLED"', 1))
 
 assert 'private class AuroraDrawable' in src
 assert 'drawerSearch.addTextChangedListener' in src
