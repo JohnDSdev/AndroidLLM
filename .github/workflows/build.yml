@@ -239,4 +239,4 @@ jobs:
           emulator-boot-timeout: 900
           script: |
             adb install -r AndroidLLM.apk
-            adb shell pm path com.johndsdev.androidllm | grep -q '^package:'
+            adb shell pm path com.johndsdev.androidllm.oled | grep -q '^package:'
