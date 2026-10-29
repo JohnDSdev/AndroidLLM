@@ -44,6 +44,9 @@ with (OUT / "oled-black.png").open("wb") as f:
 if not tap_by_text(lambda a: a.get("content-desc") == "Chats"):
     raise RuntimeError("Cannot open drawer; Chats control not found")
 
+with (OUT / "oled-sidebar.png").open("wb") as f:
+    subprocess.run(["adb", "exec-out", "screencap", "-p"], stdout=f, check=True)
+
 if not tap_by_text(lambda a: a.get("text", "").startswith("Aurora background")):
     raise RuntimeError("Aurora toggle missing from drawer")
 
