@@ -66,6 +66,7 @@ jobs:
           python3 scripts/persistent_model_patch.py
           python3 scripts/k2_batch_compat.py
           python3 scripts/k2_template_compat.py
+          python3 scripts/oled_experimental_patch.py
 
       - name: Verify generated inference and UX
         run: |
@@ -197,7 +198,7 @@ jobs:
       - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AndroidLLM-apk
+          name: AndroidLLM-OLED-experimental-apk
           path: AndroidLLM.apk
           if-no-files-found: error
 
