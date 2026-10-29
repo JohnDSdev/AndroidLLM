@@ -50,7 +50,7 @@ jobs:
       - name: Fetch released llama.cpp
         run: |
           mkdir -p vendor
-          git clone --depth 1 --branch b11454 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
+          git clone --depth 1 --branch b11941 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
           python3 scripts/prepare_llama.py
           python3 scripts/prepare_app.py
           python3 scripts/fix_v030_regressions.py
@@ -69,7 +69,9 @@ jobs:
 
       - name: Verify generated inference and UX
         run: |
-          # The pinned llama.cpp checkout must include native K2 Horizon support.
+          # The pinned llama.cpp checkout must include native K2 Horizon and LFM3 support.
+          test -s vendor/llama.cpp/src/models/lfm3.cpp
+          grep -q 'llama_model_lfm3' vendor/llama.cpp/src/models/lfm3.cpp
           test -s vendor/llama.cpp/src/models/k2-horizon.cpp
           grep -q 'llama_model_k2_horizon::graph' vendor/llama.cpp/src/models/k2-horizon.cpp
           grep -q 'for (const bool use_jinja : {preferred_jinja, !preferred_jinja})' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp

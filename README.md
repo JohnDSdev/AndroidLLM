@@ -4,8 +4,8 @@ A basic on-device Android chat app built around the official `llama.cpp` Android
 
 ## Current features
 
-- CPU-only ARM64 GGUF inference through `llama.cpp`, including K2 Horizon dense and MoVA models (architecture support available from `b11454`)
-- pinned to `llama.cpp` build `b11454`
+- CPU-only ARM64 GGUF inference through `llama.cpp`, including K2 Horizon and Liquid AI LFM3-1.7B text GGUF models
+- pinned to `llama.cpp` build `b11941`, which includes `lfm3` text architecture support
 - download a model by pasting a direct `.gguf` URL
 - load, unload, delete, and switch downloaded models
 - multiple persistent local chats
@@ -19,9 +19,11 @@ K2 Horizon models require compatible GGUF files. Smaller quantizations (such as 
 
 ## Build
 
+To download LFM3-1.7B in the app, paste the direct file URL `https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf?download=true` into the model downloader. The app currently supports text-generation models only, not LFM3 vision/audio inputs. CPU-only performance and quality depend on the device and quantization; LFM3 inference has not yet been measured on a real phone.
+
 The GitHub Actions workflow clones the pinned `llama.cpp` source, applies the small Android-binding patch in `scripts/prepare_llama.py`, runs the downloader regression test, builds an ARM64 APK, and uploads it as an Actions artifact. Main-branch builds are also published to the `dev-build` GitHub prerelease.
 
-For a local build, clone `llama.cpp` into `vendor/llama.cpp` at tag `b11454`, run `python3 scripts/prepare_llama.py`, install Android API 36 + NDK `29.0.13113456` + CMake `3.31.6`, then run Gradle `:app:assembleDebug` with Gradle 8.14.3.
+For a local build, clone `llama.cpp` into `vendor/llama.cpp` at tag `b11941`, run `python3 scripts/prepare_llama.py`, install Android API 36 + NDK `29.0.13113456` + CMake `3.31.6`, then run Gradle `:app:assembleDebug` with Gradle 8.14.3.
 
 ## Development signing
 
