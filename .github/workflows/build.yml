@@ -72,6 +72,7 @@ jobs:
           python3 scripts/oled_refinement_patch.py
           python3 scripts/oled_polish_patch.py
           python3 scripts/oled_model_picker_fix.py
+          python3 scripts/oled_standard_release.py
 
       - name: Verify generated inference and UX
         run: |
@@ -224,7 +225,7 @@ jobs:
       - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AndroidLLM-apk
+          name: AndroidLLM-standard-apk
           path: AndroidLLM.apk
           if-no-files-found: error
 
@@ -268,8 +269,8 @@ jobs:
           emulator-boot-timeout: 900
           script: |
             adb install -r AndroidLLM.apk
-            adb shell pm path com.johndsdev.androidllm.oled | grep -q '^package:'
-            python3 scripts/capture_oled_ui.py
+            adb shell pm path com.johndsdev.androidllm | grep -q '^package:'
+            # Stable build keeps the original AndroidLLM package ID
 
       - name: Upload real UI screenshots
         if: always()
