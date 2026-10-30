@@ -69,6 +69,7 @@ jobs:
           python3 scripts/oled_experimental_patch.py
           python3 scripts/oled_refinement_patch.py
           python3 scripts/oled_polish_patch.py
+          python3 scripts/oled_model_picker_fix.py
 
       - name: Verify generated inference and UX
         run: |
@@ -142,6 +143,13 @@ jobs:
           grep -q 'showSettingsDialog()' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'drawerExportButton' app/src/main/res/layout/activity_main.xml
           grep -q 'android:visibility="gone"' app/src/main/res/layout/activity_main.xml
+
+      - name: Verify repaired model picker
+        run: |
+          grep -q 'versionName = "0.8.3-oled-experimental"' app/build.gradle.kts
+          grep -q 'model_picker_background' app/src/main/res/values/colors.xml
+          grep -q 'ic_model_chevron' app/src/main/res/layout/activity_main.xml
+          test -s app/src/main/res/drawable/ic_model_chevron.xml
 
       - name: Test downloader
         run: gradle --no-daemon :app:testDebugUnitTest
