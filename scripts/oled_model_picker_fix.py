@@ -77,8 +77,8 @@ if '<color name="model_picker_background">' not in pal:
     pal=pal.replace('</resources>','    <color name="model_picker_background">#414141</color>\n</resources>')
 colors.write_text(pal)
 build=gradle.read_text()
-build=re.sub(r'versionCode = \d+', 'versionCode = 103', build,count=1)
-build=re.sub(r'versionName = "[^"]+"', 'versionName = "0.8.3-oled-experimental"',build,count=1)
+build=re.sub(r'versionCode = \d+', 'versionCode = 104', build,count=1)
+build=re.sub(r'versionName = "[^"]+"', 'versionName = "0.8.4-llamacpp-b12003"',build,count=1)
 gradle.write_text(build)
 
 assert src.count('android:id="@+id/modelCard"')==1
