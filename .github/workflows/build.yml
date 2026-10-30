@@ -67,6 +67,7 @@ jobs:
           python3 scripts/k2_batch_compat.py
           python3 scripts/k2_template_compat.py
           python3 scripts/oled_experimental_patch.py
+          python3 scripts/oled_refinement_patch.py
 
       - name: Verify generated inference and UX
         run: |
@@ -126,6 +127,13 @@ jobs:
           grep -q 'drawerChatList' app/src/main/res/layout/activity_main.xml
           grep -q 'drawerLayout.openDrawer(GravityCompat.START)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           ! grep -q 'MaterialAlertDialogBuilder' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+
+      - name: Verify OLED layout refinements
+        run: |
+          grep -q 'Select a model below to start chatting.' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'showSettingsDialog()' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'drawerExportButton' app/src/main/res/layout/activity_main.xml
+          grep -q 'android:visibility="gone"' app/src/main/res/layout/activity_main.xml
 
       - name: Test downloader
         run: gradle --no-daemon :app:testDebugUnitTest
