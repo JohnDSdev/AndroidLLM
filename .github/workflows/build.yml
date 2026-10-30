@@ -135,7 +135,7 @@ jobs:
           grep -q 'leftMargin = dp(8)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'setColor(color(R.color.surface_alt))' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'app:cardBackgroundColor="@color/surface"' app/src/main/res/layout/activity_main.xml
-          grep -q 'versionName = "0.8.2-oled-experimental"' app/build.gradle.kts
+          grep -q 'versionName = "0.8.3-oled-experimental"' app/build.gradle.kts
 
       - name: Verify OLED layout refinements
         run: |
