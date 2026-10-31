@@ -76,6 +76,7 @@ jobs:
 
       - name: Verify generated inference and UX
         run: |
+          set -euxo pipefail
           # The pinned llama.cpp checkout must include native K2 Horizon support.
           test -s vendor/llama.cpp/src/models/k2-horizon.cpp
           grep -q 'llama_model_k2_horizon::graph' vendor/llama.cpp/src/models/k2-horizon.cpp
