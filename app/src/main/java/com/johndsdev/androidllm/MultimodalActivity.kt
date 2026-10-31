@@ -51,6 +51,7 @@ class MultimodalActivity : AppCompatActivity() {
     private var running = false
     private var talker: TextToSpeech? = null
     private var ttsReady = false
+    private var voicePlayer: android.media.MediaPlayer? = null
 
     private val imagePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) setMedia(uri, "png")
@@ -95,11 +96,16 @@ class MultimodalActivity : AppCompatActivity() {
             text = title
             isAllCaps = false
             setTextColor(Color.WHITE)
-            setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xff393939.toInt()))
+            backgroundTintList = null
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xff292929.toInt())
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), 0xff525252.toInt())
+            }
             minHeight = dp(48)
         }
         body.addView(headline("Multimodal lab"))
-        body.addView(label("Runs image/audio through llama.cpp libmtmd on CPU. Models need a matching mmproj GGUF. Voice replies use Android TTS, not native LFM3 Omni audio synthesis."))
+        body.addView(label("Runs image/audio through llama.cpp libmtmd on CPU. Models need a matching mmproj GGUF. Compatible Omni models generate speech using their native audio decoder."))
 
         modelButton = btn("1 · Choose model")
         mmprojButton = btn("2 · Choose mmproj")
@@ -124,10 +130,16 @@ class MultimodalActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
             setSingleLine(false)
             minLines = 2
+            setPadding(dp(16),dp(12),dp(16),dp(12))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xff202020.toInt())
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1),0xff525252.toInt())
+            }
         }
         body.addView(prompt)
         speakSwitch = CheckBox(this).apply {
-            text = "Read answer aloud (Android Text-to-Speech)"
+            text = "Generate speech using LFM3 Omni native audio decoder"
             setTextColor(Color.WHITE)
             isChecked = true
         }
@@ -301,15 +313,36 @@ class MultimodalActivity : AppCompatActivity() {
             } catch(e:Throwable) {
                 "Multimodal error: " + (e.message?:e.javaClass.simpleName)
             }
+            val shouldSpeak = speakSwitch.isChecked && !result.startsWith("Multimodal inference error") &&
+                !result.startsWith("Multimodal error:")
+            runOnUiThread {
+                output.text = result
+                if(shouldSpeak) status.text = "Generating Omni-native speech…"
+            }
+            val voice = if(shouldSpeak) {
+                try {
+                    val wav=File(cacheDir,"omni-generated-voice.wav")
+                    MultimodalBridge.synthesizeNativeSpeech(m.absolutePath,mm.absolutePath,result,wav.absolutePath)
+                } catch(e:Throwable) {"ERROR: "+(e.message?:"Native speech generation failed")}
+            } else null
             runOnUiThread {
                 running=false
                 askButton.isEnabled=true
                 progress.visibility=android.view.View.GONE
-                output.text=result
-                status.text="Finished."
-                if(speakSwitch.isChecked && ttsReady && !result.startsWith("Multimodal")) {
-                    talker?.speak(result,TextToSpeech.QUEUE_FLUSH,null,"multimodal-response")
-                }
+                if(voice!=null && !voice.startsWith("ERROR:")) {
+                    status.text="Playing LFM3 Omni generated voice"
+                    try {
+                        voicePlayer?.release()
+                        voicePlayer=android.media.MediaPlayer().apply {
+                            setDataSource(voice)
+                            setOnCompletionListener { it.release();voicePlayer=null }
+                            prepare()
+                            start()
+                        }
+                    } catch(e:Exception) { status.text="Could not play Omni WAV: "+e.message }
+                } else if(voice!=null) {
+                    status.text=voice
+                } else status.text="Finished."
             }
         }.start()
     }
@@ -320,6 +353,8 @@ class MultimodalActivity : AppCompatActivity() {
         recording.set(false)
         talker?.stop()
         talker?.shutdown()
+        voicePlayer?.release()
+        voicePlayer=null
         super.onDestroy()
     }
 }
