@@ -250,6 +250,10 @@ new_methods=r'''
     }
 
 '''
+# Earlier UI patch scripts remove the obsolete Material dialog import.
+# Resolve the builder explicitly without restoring old chat-menu imports.
+new_methods = new_methods.replace("MaterialAlertDialogBuilder(",
+    "com.google.android.material.dialog.MaterialAlertDialogBuilder(")
 src=src.replace(insert,new_methods+insert,1)
 main.write_text(src)
 g=gradle.read_text()
