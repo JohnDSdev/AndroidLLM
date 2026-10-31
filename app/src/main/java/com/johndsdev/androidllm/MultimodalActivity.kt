@@ -141,7 +141,7 @@ class MultimodalActivity : AppCompatActivity() {
             textSize = 16f
             setTextColor(Color.WHITE)
             setPadding(dp(8), dp(16), dp(8), dp(36))
-            textIsSelectable = true
+            setTextIsSelectable(true)
             text = ""
         }
         body.addView(output)
