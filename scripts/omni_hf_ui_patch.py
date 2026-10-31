@@ -53,9 +53,10 @@ drawable.write_text('''<?xml version="1.0" encoding="utf-8"?>
 ''')
 
 x=layout.read_text()
-pattern=r'        <TextView\n(?:(?!        </LinearLayout>).)*?android:text="Android LLM"[\s\S]*? />'
-match=re.search(pattern,x,re.DOTALL)
-if not match:raise SystemExit("Drawer header title not found")
+label_at=x.index('android:text="Android LLM"', x.index('android:id="@+id/chatDrawer"'))
+view_start=x.rfind('        <TextView',0,label_at)
+view_end=x.index('/>',label_at)+2
+if view_start<0 or view_end<=view_start:raise SystemExit("Drawer header title not found")
 title='''        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="54dp"
@@ -84,7 +85,7 @@ title='''        <LinearLayout
                 android:scaleType="centerInside"
                 android:padding="12dp"/>
         </LinearLayout>'''
-x=x[:match.start()]+title+x[match.end():]
+x=x[:view_start]+title+x[view_end:]
 for view in ["gradientModeButton","drawerOptimizeButton","drawerMultimodalButton","drawerSettingsButton","drawerExportButton"]:
     pat=r'(<TextView\s+android:id="@\+id/'+view+r'"[\s\S]*?)(\s*/>)'
     x,n=re.subn(pat,lambda m:m.group(1)+'\n            android:visibility="gone"'+m.group(2),x,count=1)
