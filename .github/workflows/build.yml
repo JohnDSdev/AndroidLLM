@@ -50,7 +50,9 @@ jobs:
       - name: Fetch released llama.cpp
         run: |
           mkdir -p vendor
-          git clone --depth 1 --branch b11454 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
+          git clone --depth 1 --branch b12003 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
+          # llama.cpp's latest experimental tag, 2026-10-30
+          git -C vendor/llama.cpp describe --tags --exact-match | grep -qx b12003
           python3 scripts/prepare_llama.py
           python3 scripts/prepare_app.py
           python3 scripts/fix_v030_regressions.py
@@ -66,9 +68,15 @@ jobs:
           python3 scripts/persistent_model_patch.py
           python3 scripts/k2_batch_compat.py
           python3 scripts/k2_template_compat.py
+          python3 scripts/oled_experimental_patch.py
+          python3 scripts/oled_refinement_patch.py
+          python3 scripts/oled_polish_patch.py
+          python3 scripts/oled_model_picker_fix.py
+          python3 scripts/oled_standard_release.py
 
       - name: Verify generated inference and UX
         run: |
+          set -euxo pipefail
           # The pinned llama.cpp checkout must include native K2 Horizon support.
           test -s vendor/llama.cpp/src/models/k2-horizon.cpp
           grep -q 'llama_model_k2_horizon::graph' vendor/llama.cpp/src/models/k2-horizon.cpp
@@ -125,6 +133,27 @@ jobs:
           grep -q 'drawerChatList' app/src/main/res/layout/activity_main.xml
           grep -q 'drawerLayout.openDrawer(GravityCompat.START)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           ! grep -q 'MaterialAlertDialogBuilder' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+
+      - name: Verify OLED v0.8.2 polish
+        run: |
+          grep -q 'leftMargin = dp(8)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'setColor(color(R.color.surface_alt))' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'app:cardBackgroundColor="@color/surface"' app/src/main/res/layout/activity_main.xml
+          grep -q 'versionName = "0.8.4-oled"' app/build.gradle.kts
+
+      - name: Verify OLED layout refinements
+        run: |
+          grep -q 'Select a model below to start chatting.' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'showSettingsDialog()' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'drawerExportButton' app/src/main/res/layout/activity_main.xml
+          grep -q 'android:visibility="gone"' app/src/main/res/layout/activity_main.xml
+
+      - name: Verify repaired model picker
+        run: |
+          grep -q 'versionName = "0.8.4-oled"' app/build.gradle.kts
+          grep -q 'model_picker_background' app/src/main/res/values/colors.xml
+          grep -q 'ic_model_chevron' app/src/main/res/layout/activity_main.xml
+          test -s app/src/main/res/drawable/ic_model_chevron.xml
 
       - name: Test downloader
         run: gradle --no-daemon :app:testDebugUnitTest
@@ -197,7 +226,7 @@ jobs:
       - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AndroidLLM-apk
+          name: AndroidLLM-standard-apk
           path: AndroidLLM.apk
           if-no-files-found: error
 
@@ -221,10 +250,13 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 45
     steps:
+      - name: Checkout screenshot helper
+        uses: actions/checkout@v4
+
       - name: Download built APK
         uses: actions/download-artifact@v4
         with:
-          name: AndroidLLM-apk
+          name: AndroidLLM-standard-apk
 
       - name: Verify install on ARM64 Android emulator
         uses: reactivecircus/android-emulator-runner@v2
@@ -239,3 +271,12 @@ jobs:
           script: |
             adb install -r AndroidLLM.apk
             adb shell pm path com.johndsdev.androidllm | grep -q '^package:'
+            # Stable build keeps the original AndroidLLM package ID
+
+      - name: Upload real UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidLLM-OLED-screenshots
+          path: ui-screenshots/*.png
+          if-no-files-found: warn
