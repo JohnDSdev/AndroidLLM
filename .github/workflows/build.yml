@@ -72,6 +72,8 @@ jobs:
           python3 scripts/oled_refinement_patch.py
           python3 scripts/oled_polish_patch.py
           python3 scripts/oled_model_picker_fix.py
+          python3 scripts/thermal_optimizer_patch.py
+          python3 scripts/experimental_arm_kernels_patch.py
           python3 scripts/oled_standard_release.py
 
       - name: Verify generated inference and UX
@@ -86,8 +88,8 @@ jobs:
           ! grep -q 'GGML_CPU_ARM_ARCH=' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
           grep -q 'GGML_VULKAN=OFF' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
           ! grep -q 'GGML_VULKAN=ON' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
-          grep -q 'set(GGML_CPU_KLEIDIAI OFF)' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
-          ! grep -q 'set(GGML_CPU_KLEIDIAI ON)' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
+          grep -q 'set(GGML_CPU_KLEIDIAI ON)' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
+          # x86 path keeps KleidiAI OFF; ARM64 path is ON
           grep -q 'cpu_params.n_gpu_layers = 0' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           grep -q 'g_gpu_pp_requested = false;' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           grep -q 'GPU prompt processing is deprecated and ignored' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
@@ -132,14 +134,14 @@ jobs:
           grep -q 'androidx.drawerlayout.widget.DrawerLayout' app/src/main/res/layout/activity_main.xml
           grep -q 'drawerChatList' app/src/main/res/layout/activity_main.xml
           grep -q 'drawerLayout.openDrawer(GravityCompat.START)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
-          ! grep -q 'MaterialAlertDialogBuilder' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'private fun openModelOptimizer()' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
 
       - name: Verify OLED v0.8.2 polish
         run: |
           grep -q 'leftMargin = dp(8)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'setColor(color(R.color.surface_alt))' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
           grep -q 'app:cardBackgroundColor="@color/surface"' app/src/main/res/layout/activity_main.xml
-          grep -q 'versionName = "0.8.4-oled"' app/build.gradle.kts
+          grep -q 'versionName = "0.9.0-oled-optimizer"' app/build.gradle.kts
 
       - name: Verify OLED layout refinements
         run: |
@@ -150,7 +152,7 @@ jobs:
 
       - name: Verify repaired model picker
         run: |
-          grep -q 'versionName = "0.8.4-oled"' app/build.gradle.kts
+          grep -q 'versionName = "0.9.0-oled-optimizer"' app/build.gradle.kts
           grep -q 'model_picker_background' app/src/main/res/values/colors.xml
           grep -q 'ic_model_chevron' app/src/main/res/layout/activity_main.xml
           test -s app/src/main/res/drawable/ic_model_chevron.xml
