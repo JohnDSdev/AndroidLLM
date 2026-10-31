@@ -26,6 +26,7 @@ std::string run(const std::string & model_path,const std::string &mmproj_path,
                 const std::string &media_path,const std::string &prompt,int max_tokens) {
     if(model_path.empty() || mmproj_path.empty() || media_path.empty())
         throw std::runtime_error("Choose model, projector (mmproj GGUF), and image/audio file.");
+    llama_backend_init();
     auto model = std::unique_ptr<llama_model,decltype(&llama_model_free)>(
         llama_model_load_from_file(model_path.c_str(),[] {
             llama_model_params p=llama_model_default_params();p.n_gpu_layers=0;return p;
@@ -55,7 +56,8 @@ std::string run(const std::string & model_path,const std::string &mmproj_path,
     auto templates=common_chat_templates_init(model.get(),"");
     common_chat_msg msg;msg.role="user";
     const std::string marker=mtmd_default_marker();
-    msg.content=(prompt.empty() ? "Describe this media." : prompt) + "\n" + marker;
+    msg.content=std::string("Respond with plain text only, without audio generation. ") +
+        (prompt.empty() ? "Describe this media." : prompt) + "\n" + marker;
     std::string formatted=common_chat_format_single(templates.get(),{},msg,true,false);
     auto position=formatted.find(marker);
     if(position==std::string::npos)throw std::runtime_error("The model chat template didn't retain the media marker.");
