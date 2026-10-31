@@ -124,17 +124,19 @@ class HuggingFaceBrowserActivity : AppCompatActivity() {
         val labels=if(!choice.projector&&projectors.isNotEmpty())
             arrayOf("Download this GGUF","Download GGUF and matching projector")
         else arrayOf("Download this GGUF")
-        MaterialAlertDialogBuilder(this)
-            .setTitle(choice.name)
-            .setMessage("Quantization: "+choice.quant+"\nSize: "+"%.2f".format(choice.bytes/1073741824.0)+" GiB")
-            .setItems(labels){_,which->
-                val files=mutableListOf(choice)
-                if(which==1){
-                    val matching=projectors.find{it.name.contains(choice.quant,true)}?:projectors.firstOrNull()
-                    if(matching!=null)files.add(matching)
+        RoundedChoices.show(this, choice.name+" · "+choice.quant, labels.toList()) { which ->
+            val files=mutableListOf(choice)
+            if(which==1) {
+                val matching=projectors.find{it.name.contains(choice.quant,true)}
+                if(matching!=null) {
+                    files.add(matching)
+                } else {
+                    status.text="No matching projector quantization found. Download the correct mmproj separately."
+                    return@show
                 }
-                download(repo,files)
-            }.setNegativeButton("Cancel",null).show()
+            }
+            download(repo,files)
+        }
     }
     private fun download(repo:String,files:List<FileChoice>){
         work("Downloading GGUF…"){
