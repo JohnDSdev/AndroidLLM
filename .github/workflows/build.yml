@@ -256,7 +256,7 @@ jobs:
       - name: Download built APK
         uses: actions/download-artifact@v4
         with:
-          name: AndroidLLM-apk
+          name: AndroidLLM-standard-apk
 
       - name: Verify install on ARM64 Android emulator
         uses: reactivecircus/android-emulator-runner@v2
