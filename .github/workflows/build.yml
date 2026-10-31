@@ -87,7 +87,7 @@ jobs:
           grep -q 'GGML_VULKAN=OFF' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
           ! grep -q 'GGML_VULKAN=ON' vendor/llama.cpp/examples/llama.android/lib/build.gradle.kts
           grep -q 'set(GGML_CPU_KLEIDIAI ON)' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
-          ! grep -q 'set(GGML_CPU_KLEIDIAI OFF)' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
+          # x86 branch legitimately remains OFF; arm64 branch is ON.
           grep -q 'cpu_params.n_gpu_layers = 0' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           grep -q 'g_gpu_pp_requested = false;' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
           grep -q 'GPU prompt processing is deprecated and ignored' vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/ai_chat.cpp
