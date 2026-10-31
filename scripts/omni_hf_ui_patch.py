@@ -130,7 +130,7 @@ hub='''    private fun showSettingsHub() {
             val card = com.google.android.material.card.MaterialCardView(this).apply {
                 radius = dp(19).toFloat()
                 strokeWidth = dp(1)
-                strokeColor = color(R.color.divider)
+                strokeColor = android.content.res.ColorStateList.valueOf(color(R.color.divider))
                 cardElevation = 0f
                 setCardBackgroundColor(color(R.color.surface_alt))
                 isClickable = true
