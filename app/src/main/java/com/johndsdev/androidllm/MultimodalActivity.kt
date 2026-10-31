@@ -164,11 +164,10 @@ class MultimodalActivity : AppCompatActivity() {
         modelButton.setOnClickListener { selectGguf(false) }
         mmprojButton.setOnClickListener { selectGguf(true) }
         mediaButton.setOnClickListener {
-            MaterialAlertDialogBuilder(this)
-                .setTitle("Attach media")
-                .setItems(arrayOf("Image", "Audio (WAV / MP3 / FLAC)")) { _, which ->
-                    if (which == 0) imagePicker.launch("image/*") else audioPicker.launch("audio/*")
-                }.show()
+            RoundedChoices.show(this, "Attach media",
+                listOf("Image", "Audio (WAV / MP3 / FLAC)")) { which ->
+                if (which == 0) imagePicker.launch("image/*") else audioPicker.launch("audio/*")
+            }
         }
         recordButton.setOnClickListener { toggleRecording() }
         askButton.setOnClickListener { runInference() }
@@ -186,17 +185,16 @@ class MultimodalActivity : AppCompatActivity() {
                 .setPositiveButton("OK", null).show()
             return
         }
-        MaterialAlertDialogBuilder(this)
-            .setTitle(if (projector) "Choose projector" else "Choose model")
-            .setItems(list.map { it.name }.toTypedArray()) { _, i ->
-                if (projector) {
-                    mmproj = list[i]
-                    mmprojButton.text = "mmproj: " + list[i].name.take(35)
-                } else {
-                    model = list[i]
-                    modelButton.text = "Model: " + list[i].name.take(35)
-                }
-            }.show()
+        RoundedChoices.show(this, if (projector) "Choose projector" else "Choose model",
+            list.map { it.name }) { i ->
+            if (projector) {
+                mmproj = list[i]
+                mmprojButton.text = "mmproj: " + list[i].name.take(35)
+            } else {
+                model = list[i]
+                modelButton.text = "Model: " + list[i].name.take(35)
+            }
+        }
     }
 
     private fun setMedia(uri: Uri, fallback: String) {
