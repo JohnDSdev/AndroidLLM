@@ -54,3 +54,68 @@ before("        val downloadButton = MaterialButton(this).apply {",
         ))
 
 ''')
+
+before("    private fun showDownloadDialog() {", r'''    private fun importEdge0Assets(uri: Uri) {
+        if (busy) return
+        val source = DocumentFile.fromTreeUri(this, uri)
+        if (source == null || !source.isDirectory || source.findFile("model.json")?.isFile != true) {
+            showError("Invalid Edge0 assets", IllegalArgumentException(
+                "Choose a converted Edge0-35B asset folder containing model.json. " +
+                    "Raw Hugging Face weights are not loadable directly."
+            ))
+            return
+        }
+        setBusy(true, "Importing Edge0 assets…")
+        Thread {
+            val temporary = File(store.modelsDir, ".edge0-import-" + System.currentTimeMillis())
+            try {
+                check(temporary.mkdirs()) { "Could not create temporary model directory" }
+                var copied = 0
+                fun copyFolder(sourceFolder: DocumentFile, targetFolder: File) {
+                    sourceFolder.listFiles().forEach { entry ->
+                        val name = entry.name ?: error("An asset has no filename")
+                        require(name.isNotBlank() && name != "." && name != ".." &&
+                                '/' !in name && '\\' !in name) { "Invalid asset filename" }
+                        val destination = File(targetFolder, name)
+                        if (entry.isDirectory) {
+                            check(destination.mkdir()) { "Could not make asset directory: $name" }
+                            copyFolder(entry, destination)
+                        } else if (entry.isFile) {
+                            contentResolver.openInputStream(entry.uri).use { input ->
+                                checkNotNull(input) { "Cannot read Edge0 asset: $name" }
+                                destination.outputStream().buffered(1024 * 1024).use { output ->
+                                    input.copyTo(output, 1024 * 1024)
+                                }
+                            }
+                            copied++
+                            if (copied % 5 == 0) runOnUiThread {
+                                showStatus("Imported $copied asset files…", indeterminate = true)
+                            }
+                        }
+                    }
+                }
+                copyFolder(source, temporary)
+                check(File(temporary, "model.json").isFile) { "Missing Edge0 model.json" }
+                check(copied > 1) { "Asset folder contains no weights" }
+                var name = "Edge0-35B"
+                var suffix = 2
+                while (File(store.modelsDir, name).exists()) {
+                    name = "Edge0-35B-" + suffix++
+                }
+                val installed = File(store.modelsDir, name)
+                check(temporary.renameTo(installed)) { "Cannot finish model import" }
+                runOnUiThread {
+                    setBusy(false)
+                    selectAndLoadModel(installed)
+                }
+            } catch (error: Throwable) {
+                temporary.deleteRecursively()
+                runOnUiThread {
+                    setBusy(false)
+                    showError("Edge0 import failed", error)
+                }
+            }
+        }.start()
+    }
+
+''')
