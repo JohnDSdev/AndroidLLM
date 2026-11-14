@@ -204,3 +204,73 @@ before("    private fun sendMessage() {",
     }
 
 ''')
+
+# A converted Edge0 model is a directory with a model manifest.
+once(
+'''    private fun modelFiles(): List<File> =
+        store.modelsDir.listFiles()
+            ?.filter { it.isFile && it.extension.equals("gguf", ignoreCase = true) }
+            ?.sortedBy { it.name.lowercase() }
+            ?: emptyList()
+''',
+'''    private fun isEdge0Asset(file: File): Boolean =
+        file.isDirectory && File(file, "model.json").isFile
+
+    private fun modelFiles(): List<File> =
+        store.modelsDir.listFiles()
+            ?.filter { (it.isFile && it.extension.equals("gguf", ignoreCase = true)) || isEdge0Asset(it) }
+            ?.sortedBy { it.name.lowercase() }
+            ?: emptyList()
+''')
+once("                append(formatBytes(file.length()))",
+     '                append(if (file.isDirectory) "Edge0 native assets" else formatBytes(file.length()))')
+once("                    if (file.delete()) {",
+     "                    if (if (file.isDirectory) file.deleteRecursively() else file.delete()) {")
+
+d = chr(36) + "{"
+old_message = '            message = "' + d + 'file.name}\\n' + d + 'formatBytes(file.length())}",'
+new_message = '            message = "' + d + 'file.name}\\n' + d + 'if (file.isDirectory) "Edge0 native assets" else formatBytes(file.length())}",'
+once(old_message, new_message)
+
+# The CPU benchmark exists for GGUF and must not receive an asset directory.
+start = text.find("    private fun openModelOptimizer() {")
+end = text.find("    private fun runModelOptimization(", start)
+if start < 0 or end < 0:
+    raise SystemExit("Edge0 optimizer boundary not found")
+optimizer = text[start:end]
+if optimizer.count("val files = modelFiles()") != 1:
+    raise SystemExit("Edge0 optimizer file list changed")
+text = text[:start] + optimizer.replace(
+    "val files = modelFiles()", "val files = modelFiles().filter { it.isFile }", 1
+) + text[end:]
+
+# Existing export button must continue to work when an Edge0 folder is installed.
+old_zip = (
+    '                        zip.putNextEntry(ZipEntry("models/' + d + 'model.name}"))\n'
+    '                        model.inputStream().buffered(1024 * 1024).use { it.copyTo(zip, 1024 * 1024) }\n'
+    '                        zip.closeEntry()\n'
+)
+new_zip = (
+    '                        val contents = if (model.isDirectory) model.walkTopDown().filter { it.isFile }.toList()\n'
+    '                                       else listOf(model)\n'
+    '                        contents.forEach { entry ->\n'
+    '                            val suffix = if (model.isDirectory) "/" + entry.relativeTo(model).invariantSeparatorsPath else ""\n'
+    '                            zip.putNextEntry(ZipEntry("models/' + d + 'model.name}' + d + 'suffix}"))\n'
+    '                            entry.inputStream().buffered(1024 * 1024).use { it.copyTo(zip, 1024 * 1024) }\n'
+    '                            zip.closeEntry()\n'
+    '                        }\n'
+)
+once(old_zip, new_zip)
+
+once("    private val edge0Engine by lazy { Edge0Runtime() }\n",
+     "    private val edge0Engine by lazy { Edge0Runtime() }\n"
+     "    @Volatile private var edge0Active = false\n")
+once("loadedModelName == chat.modelFile && edge0Engine.loaded) {",
+     "loadedModelName == chat.modelFile && edge0Active) {")
+
+assert "Edge0 native assets" in text
+assert "selectedResponseFlow(chat, text)" in text
+assert "edge0ImportLauncher.launch(null)" in text
+assert "private fun isEdge0Asset(file: File)" in text
+main.write_text(text)
+print("Edge0 35B Android integration applied")
