@@ -75,6 +75,15 @@ jobs:
           python3 scripts/thermal_optimizer_patch.py
           python3 scripts/experimental_arm_kernels_patch.py
           python3 scripts/oled_standard_release.py
+          python3 scripts/edge0_integration_patch.py
+
+      - name: Fetch pinned Edge0 native engine
+        shell: bash
+        run: |
+          git clone --filter=blob:none --depth 1 https://github.com/Edge0-AI/Edge0.git vendor/Edge0
+          git -C vendor/Edge0 fetch --depth 1 origin 7b60076641ccd4adeec8b9a41874a24c477fec02
+          git -C vendor/Edge0 checkout 7b60076641ccd4adeec8b9a41874a24c477fec02
+          test -s vendor/Edge0/edge0-infer/CMakeLists.txt
 
       - name: Verify generated inference and UX
         run: |
@@ -157,6 +166,16 @@ jobs:
           grep -q 'ic_model_chevron' app/src/main/res/layout/activity_main.xml
           test -s app/src/main/res/drawable/ic_model_chevron.xml
 
+      - name: Verify Edge0 UI and native integration
+        shell: bash
+        run: |
+          test -s app/src/main/cpp/edge0_bridge.cpp
+          grep -q 'selectedResponseFlow(chat, text)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'private fun isEdge0Asset' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'edge0ImportLauncher.launch(null)' app/src/main/java/com/johndsdev/androidllm/MainActivity.kt
+          grep -q 'edge0::edge0' app/src/main/cpp/CMakeLists.txt
+          grep -q 'Java_com_johndsdev_androidllm_Edge0Runtime_nativeGenerate' app/src/main/cpp/edge0_bridge.cpp
+
       - name: Test downloader
         run: gradle --no-daemon :app:testDebugUnitTest
 
@@ -199,6 +218,7 @@ jobs:
         run: |
           unzip -l AndroidLLM.apk | tee apk-contents.txt
           grep -q 'lib/arm64-v8a/libai-chat.so' apk-contents.txt
+          grep -q 'lib/arm64-v8a/libedge0_androidllm.so' apk-contents.txt
 
           if grep -q 'lib/arm64-v8a/libggml-cpu.so' apk-contents.txt; then
             echo "Unexpected dynamic libggml-cpu.so plugin found"
