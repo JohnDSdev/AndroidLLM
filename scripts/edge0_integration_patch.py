@@ -119,3 +119,88 @@ before("    private fun showDownloadDialog() {", r'''    private fun importEdge0
     }
 
 ''')
+
+# Keep the GGUF engine untouched, and load Edge0 only for a converted asset directory.
+once("    private fun ensureModelLoaded(chat: ChatSession) {\n",
+'''    private fun ensureModelLoaded(chat: ChatSession) {
+        val selected = chat.modelFile ?: loadedModelName ?: error("No model selected")
+        val folder = File(store.modelsDir, selected)
+        if (isEdge0Asset(folder)) {
+            if (chat.modelFile == null) {
+                chat.modelFile = selected
+                store.save()
+            }
+            if (edge0Active && loadedModelName == selected) {
+                if (loadedChatId != chat.id) {
+                    edge0Engine.reset()
+                    loadedChatId = chat.id
+                }
+                return
+            }
+            unloadModelBlocking()
+            runOnUiThread { showStatus("Loading Edge0-35B native engine…", indeterminate = true) }
+            edge0Engine.load(folder.absolutePath)
+            edge0Active = true
+            loadedModelName = selected
+            loadedChatId = chat.id
+            loadedContextLength = chat.contextLength
+            loadedRuntimeKey = "edge0-35b"
+            gpuPpActive = false
+            runOnUiThread { renderHeader() }
+            return
+        }
+        if (edge0Active) {
+            edge0Engine.unload()
+            edge0Active = false
+        }
+''')
+once("    private fun unloadModelBlocking() {\n",
+'''    private fun unloadModelBlocking() {
+        if (edge0Active) {
+            edge0Engine.unload()
+            edge0Active = false
+        }
+''')
+once("        engine.stopGeneration()\n",
+'''        if (edge0Active) edge0Engine.cancel() else engine.stopGeneration()
+''')
+once("engine.sendUserPrompt(text, enableThinking = chat.thinkingEnabled).collect { token ->",
+     "selectedResponseFlow(chat, text).collect { token ->")
+before("    private fun sendMessage() {",
+'''    private fun selectedResponseFlow(chat: ChatSession, text: String): Flow<String> {
+        val selected = chat.modelFile?.let { File(store.modelsDir, it) }
+        if (selected == null || !isEdge0Asset(selected)) {
+            return engine.sendUserPrompt(text, enableThinking = chat.thinkingEnabled)
+        }
+        // The model receives the full conversation, and its own runtime handles
+        // prompt-prefix caching and MoE expert streaming from flash.
+        val transcript = listOf("system" to chat.systemPrompt.ifBlank { AppStore.DEFAULT_SYSTEM_PROMPT }) +
+            chat.messages.dropLast(1)
+                .filter { it.content.isNotBlank() }
+                .map { it.role to it.content }
+        return callbackFlow {
+            val worker = Thread {
+                try {
+                    edge0Engine.prepare()
+                    val speed = edge0Engine.generate(
+                        transcript,
+                        chat.thinkingEnabled,
+                        chat.temperature.toDouble(),
+                        Edge0Output { kind, data ->
+                            // Do not put raw reasoning tokens in the visible answer.
+                            if (kind == 0) trySendBlocking(data.toString(Charsets.UTF_8))
+                        }
+                    )
+                    if (speed.isFinite() && speed > 0.0) lastTps = speed
+                    close()
+                } catch (error: Throwable) {
+                    close(error)
+                }
+            }
+            worker.name = "AndroidLLM-Edge0"
+            worker.start()
+            awaitClose { edge0Engine.cancel() }
+        }
+    }
+
+''')
