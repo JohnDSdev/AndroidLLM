@@ -6,6 +6,7 @@ plugins {
 android {
     namespace = "com.johndsdev.androidllm"
     compileSdk = 36
+    ndkVersion = "29.0.14206865"
 
     defaultConfig {
         applicationId = "com.johndsdev.androidllm"
@@ -14,8 +15,19 @@ android {
         versionCode = 16
         versionName = "0.7.4"
 
+        externalNativeBuild {
+            cmake { arguments += listOf("-DCMAKE_BUILD_TYPE=Release", "-DGGML_VULKAN=OFF") }
+        }
+
         ndk {
             abiFilters += listOf("arm64-v8a")
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.31.6"
         }
     }
 
@@ -63,6 +75,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation("androidx.drawerlayout:drawerlayout:1.2.0")
     implementation("io.noties.markwon:core:4.6.2")
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
