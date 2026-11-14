@@ -1,0 +1,157 @@
+name: Convert Edge0 35B assets
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/edge0-assets.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: edge0-35b-conversion
+  cancel-in-progress: false
+
+jobs:
+  convert-and-publish:
+    name: Convert, verify, and publish Edge0-35B for AndroidLLM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    env:
+      MODEL_ROOT: /tmp/edge0-androidllm-assets
+      EDGE0_COMMIT: 7b60076641ccd4adeec8b9a41874a24c477fec02
+      RELEASE_TAG: edge0-35b-assets
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout AndroidLLM for publishing
+        uses: actions/checkout@v4
+
+      - name: Reclaim disk space for 42 GB conversion
+        uses: jlumbroso/free-disk-space@main
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          preinstalled-runtimes: false
+          swap-storage: true
+
+      - name: Verify available disk
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h /
+          available="$(df -P -B1 / | awk 'NR==2 {print $4}')"
+          echo "Available bytes: $available"
+          if (( available < 49000000000 )); then
+            echo "::error::Need at least 49 GB free for input, converted output, and release parts"
+            exit 1
+          fi
+          mkdir -p "$MODEL_ROOT"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: false
+
+      - name: Fetch pinned Edge0 converter
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --depth 1 https://github.com/Edge0-AI/Edge0.git "$MODEL_ROOT/edge0"
+          git -C "$MODEL_ROOT/edge0" fetch --depth 1 origin "$EDGE0_COMMIT"
+          git -C "$MODEL_ROOT/edge0" checkout --detach "$EDGE0_COMMIT"
+          test -f "$MODEL_ROOT/edge0/edge0-infer/tools/assets/edge0_35b/source.lock.json"
+          cd "$MODEL_ROOT/edge0/edge0-infer"
+          uv sync --project tools/assets --no-dev
+          python3 -V
+          df -h /
+
+      - name: Download source checkpoint with SHA256 verification
+        shell: bash
+        timeout-minutes: 140
+        run: |
+          set -euo pipefail
+          cd "$MODEL_ROOT/edge0/edge0-infer"
+          uv run --project tools/assets --offline --no-sync python -I \
+            tools/assets/edge0_35b/fetch_source.py download --out "$MODEL_ROOT/source"
+          du -sh "$MODEL_ROOT/source"
+          df -h /
+
+      - name: Convert Edge0-35B and validate complete asset manifest
+        shell: bash
+        timeout-minutes: 100
+        run: |
+          set -euo pipefail
+          cd "$MODEL_ROOT/edge0/edge0-infer"
+          uv run --project tools/assets --offline --no-sync python -I \
+            tools/assets/edge0_35b/make_assets.py \
+            --source "$MODEL_ROOT/source" --out "$MODEL_ROOT/converted/Edge0-35B"
+          uv run --project tools/assets --offline --no-sync python -I \
+            tools/assets/check_assets.py check "$MODEL_ROOT/converted/Edge0-35B"
+          test -s "$MODEL_ROOT/converted/Edge0-35B/model.json"
+          test -s "$MODEL_ROOT/converted/Edge0-35B/base.gguf"
+          test -s "$MODEL_ROOT/converted/Edge0-35B/assets.tsv"
+          du -sh "$MODEL_ROOT/converted/Edge0-35B"
+          df -h /
+
+      - name: Remove source and create under-2-GiB release parts
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$MODEL_ROOT/source"
+          mkdir -p "$MODEL_ROOT/parts"
+          # A streamed TAR avoids holding a third full-sized archive.
+          tar -C "$MODEL_ROOT/converted" -cf - Edge0-35B \
+            | split -d -a 3 -b 1900m - "$MODEL_ROOT/parts/edge0-35b-assets.tar.part-"
+          cd "$MODEL_ROOT/parts"
+          sha256sum edge0-35b-assets.tar.part-* > SHA256SUMS
+          cat > README-IMPORT.txt <<'EOF'
+          Edge0-35B converted model assets for AndroidLLM
+
+          Source model: https://huggingface.co/Edge0/Edge0-35B-A3B-preview
+          Source license: Apache 2.0
+          Converter: https://github.com/Edge0-AI/Edge0
+          Compatible AndroidLLM APK: https://github.com/JohnDSdev/AndroidLLM/releases/tag/dev-build
+
+          Download ALL edge0-35b-assets.tar.part-000, -001, ... parts
+          into the SAME directory (including the last numbered part).
+
+          In Termux or a Linux/macOS terminal from that directory:
+            sha256sum -c SHA256SUMS
+            cat edge0-35b-assets.tar.part-* | tar -xvf -
+
+          This produces an Edge0-35B folder with model.json, base.gguf,
+          lora.gguf, prerouter.gguf, assets.tsv, and other model files.
+
+          Copy the complete Edge0-35B folder to your Android phone if
+          unpacked on a computer. In AndroidLLM choose
+          "Import Edge0-35B assets folder" and select Edge0-35B.
+
+          The AndroidLLM app copies the folder to app-private storage.
+          Make sure you have enough free space for the import.
+          EOF
+          ls -lh
+          df -h /
+
+      - name: Publish verified assets to separate GitHub release
+        shell: bash
+        timeout-minutes: 90
+        run: |
+          set -euo pipefail
+          cd "$MODEL_ROOT/parts"
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --target "$GITHUB_SHA" \
+              --title "Edge0-35B converted AndroidLLM assets" \
+              --notes "Official Edge0-35B-A3B-preview weights converted with the pinned Edge0 converter and verified with check_assets.py. Apache-2.0 source: https://huggingface.co/Edge0/Edge0-35B-A3B-preview . Download every numbered .tar.part- file plus SHA256SUMS, verify with sha256sum -c SHA256SUMS, and extract with: cat edge0-35b-assets.tar.part-* | tar -xvf - . Then import the Edge0-35B folder in AndroidLLM. Read README-IMPORT.txt for details." \
+              --prerelease
+          fi
+          gh release upload "$RELEASE_TAG" \
+            edge0-35b-assets.tar.part-* SHA256SUMS README-IMPORT.txt \
+            --clobber
+          echo "Release: https://github.com/${{ github.repository }}/releases/tag/$RELEASE_TAG"
+          gh release view "$RELEASE_TAG" --json assets \
+            --jq '.assets[] | [.name, .size] | @tsv'
