@@ -33,11 +33,6 @@ once("        engine = AiChat.getInferenceEngine(applicationContext)\n",
      "            if (uri != null) importEdge0Assets(uri)\n"
      "        }\n")
 
-once('        contextView.text = "' + '$' + '{formatContext(chat.contextLength)} ctx"\n',
-     '        contextView.text = if (loadedModelName != null && loadedModelName == chat.modelFile && edge0Engine.loaded) {\n'
-     '            "' + '$' + '{formatContext(edge0Engine.contextLength.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())} ctx"\n'
-     '        } else "' + '$' + '{formatContext(chat.contextLength)} ctx"\n')
-
 before("        val downloadButton = MaterialButton(this).apply {",
 '''        val edge0Button = MaterialButton(this).apply {
             text = "Import Edge0-35B assets folder"
@@ -265,8 +260,6 @@ once(old_zip, new_zip)
 once("    private val edge0Engine by lazy { Edge0Runtime() }\n",
      "    private val edge0Engine by lazy { Edge0Runtime() }\n"
      "    @Volatile private var edge0Active = false\n")
-once("loadedModelName == chat.modelFile && edge0Engine.loaded) {",
-     "loadedModelName == chat.modelFile && edge0Active) {")
 
 assert "Edge0 native assets" in text
 assert "selectedResponseFlow(chat, text)" in text
