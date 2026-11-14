@@ -232,7 +232,11 @@ jobs:
           unzip -p AndroidLLM.apk lib/arm64-v8a/libai-chat.so > /tmp/libai-chat.so
           size=$(stat -c%s /tmp/libai-chat.so)
           echo "Static CPU libai-chat.so size: $size bytes"
-          test "$size" -gt 50000000
+          # Packaging strips native debug symbols, so executable size is not
+          # a valid indicator of whether the static CPU backend is present.
+          test "$size" -gt 5000000
+          unzip -p AndroidLLM.apk lib/arm64-v8a/libedge0_androidllm.so > /tmp/libedge0_androidllm.so
+          test "$(stat -c%s /tmp/libedge0_androidllm.so)" -gt 1000000
           strings /tmp/libai-chat.so | grep -q 'AndroidLLM started without a registered llama.cpp backend'
           strings /tmp/libai-chat.so | grep -q 'configured context window exhausted'
 
