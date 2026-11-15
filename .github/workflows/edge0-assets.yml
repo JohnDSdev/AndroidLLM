@@ -23,6 +23,7 @@ jobs:
       EDGE0_COMMIT: 7b60076641ccd4adeec8b9a41874a24c477fec02
       RELEASE_TAG: edge0-35b-assets
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
       - name: Checkout AndroidLLM for publishing
         uses: actions/checkout@v4
